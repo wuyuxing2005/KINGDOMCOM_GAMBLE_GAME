@@ -1,0 +1,11 @@
+.godot/
+.tools/
+tmp/
+/android/
+build/android/*.apk
+build/android/*.aab
+*.keystore
+*.log
+android/build/.gradle/
+android/build/build/
+android/build/.cxx/
