@@ -32,6 +32,16 @@
 
 测试覆盖计分组合、非法混选、爆骰、热骰、状态切换、AI 决策和全部 46,656 种六骰结果。
 
+## Windows 导出
+
+工程已配置 `Windows Desktop` Release 导出预设，目标架构为 x86_64，游戏资源嵌入单个 EXE。命令行导出：
+
+```powershell
+& "D:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --headless --path "D:\shaizi_game" --export-release "Windows Desktop" "D:\shaizi_game\build\windows\medieval_dice.exe"
+```
+
+已导出的程序位于 `build/windows/medieval_dice.exe`，分发压缩包位于 `build/medieval_dice-windows-x86_64.zip`。当前构建未使用商业代码签名证书，Windows 首次运行时可能显示安全提醒。
+
 ## Android 导出
 
 工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.0.0`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64。
@@ -55,4 +65,3 @@
 - 中文字体：霞鹜文楷 v1.522，SIL Open Font License 1.1。完整许可见 `licenses/LXGW-WenKai-OFL-1.1.txt`。
 - 木桌纹理、羊皮纸面板和应用图标：使用 OpenAI imagegen 为本项目生成的原创素材，提示词记录在 `ASSET_SOURCES.md`。
 - 骰子网格、凹点和金色选择环：运行时由项目代码程序化生成。
-

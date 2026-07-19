@@ -5,6 +5,7 @@ tmp/
 build/android/*.apk
 build/android/*.aab
 build/windows/
+build/*.zip
 *.keystore
 *.log
 android/build/.gradle/
