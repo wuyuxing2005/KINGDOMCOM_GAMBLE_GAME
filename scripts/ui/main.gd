@@ -49,6 +49,14 @@ var bank_button: Button
 var rules_overlay: Control
 var win_overlay: Control
 var win_title: Label
+var settings_overlay: Control
+var settings_notice: Label
+var settings_return_button: Button
+var settings_menu_button: Button
+var music_volume_slider: HSlider
+var music_volume_label: Label
+var fullscreen_toggle: Button
+var background_music: AudioStreamPlayer
 
 var parchment_texture: Texture2D
 var main_font: Font
@@ -56,6 +64,7 @@ var main_font: Font
 func _ready() -> void:
 	parchment_texture = load("res://assets/ui/parchment_panel.png")
 	main_font = load("res://assets/fonts/LXGWWenKai-Regular.ttf")
+	_build_audio()
 	_build_world()
 	_build_ui()
 	human_controller.action_requested.connect(_on_controller_action)
@@ -83,7 +92,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("back_to_menu"):
-		if rules_overlay.visible:
+		if settings_overlay.visible:
+			_show_menu()
+		elif rules_overlay.visible:
 			rules_overlay.visible = false
 		elif game_hud.visible:
 			_show_menu()
@@ -104,6 +115,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	else:
 		return
 	get_viewport().set_input_as_handled()
+
+func _build_audio() -> void:
+	background_music = AudioStreamPlayer.new()
+	background_music.name = "BackgroundMusic"
+	background_music.process_mode = Node.PROCESS_MODE_ALWAYS
+	var music_stream: AudioStreamMP3 = load("res://assets/music/music.mp3")
+	music_stream.loop = true
+	background_music.stream = music_stream
+	add_child(background_music)
+	background_music.play()
 
 func _build_world() -> void:
 	var world := Node3D.new()
@@ -176,6 +197,7 @@ func _build_ui() -> void:
 	_build_menu()
 	_build_game_hud()
 	_build_rules_overlay()
+	_build_settings_overlay()
 	_build_win_overlay()
 
 func _build_menu() -> void:
@@ -192,13 +214,13 @@ func _build_menu() -> void:
 
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-285, -250)
-	panel.size = Vector2(570, 500)
+	panel.position = Vector2(-285, -285)
+	panel.size = Vector2(570, 570)
 	menu_screen.add_child(panel)
 
 	var content := VBoxContainer.new()
 	content.position = Vector2(76, 64)
-	content.size = Vector2(418, 370)
+	content.size = Vector2(418, 450)
 	content.add_theme_constant_override("separation", 18)
 	panel.add_child(content)
 
@@ -221,6 +243,12 @@ func _build_menu() -> void:
 	_style_button(start_button, 28)
 	start_button.pressed.connect(_start_selected_game)
 	content.add_child(start_button)
+	var settings_button := Button.new()
+	settings_button.text = "设置"
+	settings_button.custom_minimum_size.y = 48
+	_style_button(settings_button, 22)
+	settings_button.pressed.connect(_open_menu_settings)
+	content.add_child(settings_button)
 	var exit_button := Button.new()
 	exit_button.text = "退出"
 	exit_button.custom_minimum_size.y = 48
@@ -280,8 +308,8 @@ func _build_game_hud() -> void:
 
 	var actions := VBoxContainer.new()
 	actions.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	actions.position = Vector2(-328, -224)
-	actions.size = Vector2(300, 204)
+	actions.position = Vector2(-328, -282)
+	actions.size = Vector2(300, 262)
 	actions.add_theme_constant_override("separation", 10)
 	game_hud.add_child(actions)
 	roll_again_button = Button.new()
@@ -302,6 +330,12 @@ func _build_game_hud() -> void:
 	_style_button(rules_button, 20)
 	rules_button.pressed.connect(_toggle_rules)
 	actions.add_child(rules_button)
+	var settings_button := Button.new()
+	settings_button.text = "设置"
+	settings_button.custom_minimum_size.y = 48
+	_style_button(settings_button, 20)
+	settings_button.pressed.connect(_open_settings)
+	actions.add_child(settings_button)
 
 	status_label = _make_label("", 28, Color("fff0c8"), HORIZONTAL_ALIGNMENT_CENTER)
 	status_label.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -351,6 +385,70 @@ func _build_rules_overlay() -> void:
 	close.pressed.connect(_toggle_rules)
 	panel.add_child(close)
 
+func _build_settings_overlay() -> void:
+	settings_overlay = Control.new()
+	settings_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	settings_overlay.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+	settings_overlay.visible = false
+	ui_root.add_child(settings_overlay)
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.74)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	settings_overlay.add_child(shade)
+	var panel := _make_parchment_panel()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-340, -250)
+	panel.size = Vector2(680, 500)
+	settings_overlay.add_child(panel)
+	var title := _make_label("设置", 42, INK, HORIZONTAL_ALIGNMENT_CENTER)
+	title.position = Vector2(80, 42)
+	title.size = Vector2(520, 62)
+	panel.add_child(title)
+	settings_notice = _make_label("", 20, Color("725037"), HORIZONTAL_ALIGNMENT_CENTER)
+	settings_notice.position = Vector2(70, 105)
+	settings_notice.size = Vector2(540, 40)
+	panel.add_child(settings_notice)
+	var volume_title := _make_label("音乐音量", 25, INK)
+	volume_title.position = Vector2(100, 166)
+	volume_title.size = Vector2(300, 40)
+	panel.add_child(volume_title)
+	music_volume_label = _make_label("100%", 23, INK, HORIZONTAL_ALIGNMENT_RIGHT)
+	music_volume_label.position = Vector2(430, 166)
+	music_volume_label.size = Vector2(150, 40)
+	panel.add_child(music_volume_label)
+	music_volume_slider = HSlider.new()
+	music_volume_slider.position = Vector2(100, 212)
+	music_volume_slider.size = Vector2(480, 42)
+	music_volume_slider.min_value = 0.0
+	music_volume_slider.max_value = 100.0
+	music_volume_slider.step = 1.0
+	music_volume_slider.value = 100.0
+	music_volume_slider.value_changed.connect(_on_music_volume_changed)
+	panel.add_child(music_volume_slider)
+	if OS.has_feature("windows"):
+		fullscreen_toggle = Button.new()
+		fullscreen_toggle.toggle_mode = true
+		fullscreen_toggle.button_pressed = DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+		fullscreen_toggle.text = "无边框全屏：开" if fullscreen_toggle.button_pressed else "无边框全屏：关"
+		fullscreen_toggle.position = Vector2(190, 292)
+		fullscreen_toggle.size = Vector2(300, 56)
+		_style_button(fullscreen_toggle, 22)
+		fullscreen_toggle.toggled.connect(_on_borderless_fullscreen_toggled)
+		panel.add_child(fullscreen_toggle)
+	settings_return_button = Button.new()
+	settings_return_button.position = Vector2(90, 393)
+	settings_return_button.size = Vector2(235, 58)
+	_style_button(settings_return_button, 24)
+	settings_return_button.pressed.connect(_close_settings)
+	panel.add_child(settings_return_button)
+	settings_menu_button = Button.new()
+	settings_menu_button.text = "返回主界面"
+	settings_menu_button.position = Vector2(355, 393)
+	settings_menu_button.size = Vector2(235, 58)
+	_style_button(settings_menu_button, 24)
+	settings_menu_button.pressed.connect(_show_menu)
+	panel.add_child(settings_menu_button)
+
 func _build_win_overlay() -> void:
 	win_overlay = Control.new()
 	win_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -385,6 +483,7 @@ func _build_win_overlay() -> void:
 	panel.add_child(menu)
 
 func _start_selected_game() -> void:
+	get_tree().paused = false
 	var target := target_option.get_item_id(target_option.selected)
 	game_generation += 1
 	_clear_all_dice()
@@ -392,6 +491,7 @@ func _start_selected_game() -> void:
 	game_hud.visible = true
 	win_overlay.visible = false
 	rules_overlay.visible = false
+	settings_overlay.visible = false
 	session = Session.new(target)
 	session.state_changed.connect(_on_state_changed)
 	session.rolled.connect(_on_rolled)
@@ -405,6 +505,7 @@ func _start_selected_game() -> void:
 	_start_turn_after_delay(game_generation, 0.45)
 
 func _show_menu() -> void:
+	get_tree().paused = false
 	game_generation += 1
 	input_locked = true
 	session = null
@@ -414,6 +515,38 @@ func _show_menu() -> void:
 	game_hud.visible = false
 	rules_overlay.visible = false
 	win_overlay.visible = false
+	settings_overlay.visible = false
+
+func _open_settings() -> void:
+	settings_notice.text = "当前对局已暂停，背景音乐将继续播放"
+	settings_return_button.text = "返回游戏"
+	settings_return_button.position = Vector2(90, 393)
+	settings_return_button.size = Vector2(235, 58)
+	settings_menu_button.visible = true
+	settings_overlay.visible = true
+	get_tree().paused = true
+
+func _open_menu_settings() -> void:
+	settings_notice.text = "背景音乐将继续播放"
+	settings_return_button.text = "返回主界面"
+	settings_return_button.position = Vector2(190, 393)
+	settings_return_button.size = Vector2(300, 58)
+	settings_menu_button.visible = false
+	settings_overlay.visible = true
+	get_tree().paused = true
+
+func _close_settings() -> void:
+	settings_overlay.visible = false
+	get_tree().paused = false
+	_update_buttons()
+
+func _on_music_volume_changed(value: float) -> void:
+	music_volume_label.text = "%d%%" % int(value)
+	background_music.volume_db = linear_to_db(value / 100.0) if value > 0.0 else -80.0
+
+func _on_borderless_fullscreen_toggled(enabled: bool) -> void:
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if enabled else DisplayServer.WINDOW_MODE_WINDOWED)
+	fullscreen_toggle.text = "无边框全屏：开" if enabled else "无边框全屏：关"
 
 func _start_turn_after_delay(generation: int, delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
@@ -593,7 +726,7 @@ func _update_buttons() -> void:
 	bank_button.disabled = not enabled
 
 func _can_human_act() -> bool:
-	return session != null and not input_locked and session.current_player == 0 and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible
+	return session != null and not input_locked and session.current_player == 0 and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible and not settings_overlay.visible
 
 func _toggle_rules() -> void:
 	if not game_hud.visible:
