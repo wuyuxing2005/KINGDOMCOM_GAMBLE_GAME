@@ -1,0 +1,14 @@
+[Unit]
+Description=Medieval Dice Godot Server
+After=network-online.target
+
+[Service]
+Type=simple
+User=medievaldice
+WorkingDirectory=/opt/medieval-dice
+ExecStart=/opt/medieval-dice/medieval_dice_server.x86_64 -- --port=9080
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
