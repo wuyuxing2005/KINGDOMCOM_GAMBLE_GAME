@@ -61,6 +61,8 @@ func _run() -> void:
 		_fail("服务器未生成首轮骰子")
 		_finish(server)
 		return
+	if host_snapshot.target_score != 1500 or guest_snapshot.target_score != 1500:
+		_fail("房主选择的目标分数未同步到双方")
 	if host_snapshot.current_roll != guest_snapshot.current_roll:
 		_fail("双端骰子点数不一致")
 	var subsets := ScoringRules.get_scoring_subsets(host_snapshot.current_roll)
