@@ -61,7 +61,14 @@ var win_overlay: Control
 var win_title: Label
 var rematch_button: Button
 var online_overlay: Control
+var online_choice_view: Control
+var online_join_view: Control
+var online_create_view: Control
 var room_code_edit: LineEdit
+var online_target_option: OptionButton
+var create_room_button: Button
+var join_room_button: Button
+var created_room_code_label: Label
 var online_status_label: Label
 var pending_online_request := ""
 var settings_overlay: Control
@@ -441,50 +448,108 @@ func _build_online_overlay() -> void:
 	panel.position = Vector2(-330, -300)
 	panel.size = Vector2(660, 600)
 	online_overlay.add_child(panel)
-	var content := VBoxContainer.new()
-	content.position = Vector2(80, 55)
-	content.size = Vector2(500, 490)
-	content.add_theme_constant_override("separation", 12)
-	panel.add_child(content)
 	var title := _make_label("联机对战", 40, INK, HORIZONTAL_ALIGNMENT_CENTER)
-	title.custom_minimum_size.y = 58
-	content.add_child(title)
-	var server_notice := _make_label("使用中世纪骰局公共服务器", 20, Color("725037"), HORIZONTAL_ALIGNMENT_CENTER)
-	server_notice.custom_minimum_size.y = 38
-	content.add_child(server_notice)
-	content.add_child(_make_label("房间码（加入房间时填写）", 21, INK))
+	title.position = Vector2(80, 64)
+	title.size = Vector2(500, 58)
+	panel.add_child(title)
+
+	online_choice_view = Control.new()
+	online_choice_view.position = Vector2(80, 145)
+	online_choice_view.size = Vector2(500, 385)
+	panel.add_child(online_choice_view)
+	var create_choice := Button.new()
+	create_choice.text = "创建房间"
+	create_choice.position = Vector2(65, 48)
+	create_choice.size = Vector2(370, 72)
+	_style_button(create_choice, 27)
+	create_choice.pressed.connect(_show_online_create)
+	online_choice_view.add_child(create_choice)
+	var join_choice := Button.new()
+	join_choice.text = "加入房间"
+	join_choice.position = Vector2(65, 148)
+	join_choice.size = Vector2(370, 72)
+	_style_button(join_choice, 27)
+	join_choice.pressed.connect(_show_online_join)
+	online_choice_view.add_child(join_choice)
+	var lobby_back := Button.new()
+	lobby_back.text = "返回主菜单"
+	lobby_back.position = Vector2(100, 294)
+	lobby_back.size = Vector2(300, 52)
+	_style_button(lobby_back, 21)
+	lobby_back.pressed.connect(_close_online_lobby)
+	online_choice_view.add_child(lobby_back)
+
+	online_join_view = Control.new()
+	online_join_view.position = Vector2(80, 145)
+	online_join_view.size = Vector2(500, 385)
+	panel.add_child(online_join_view)
+	var join_title := _make_label("输入房主分享的六位房间码", 23, INK, HORIZONTAL_ALIGNMENT_CENTER)
+	join_title.position = Vector2(0, 20)
+	join_title.size = Vector2(500, 42)
+	online_join_view.add_child(join_title)
 	room_code_edit = LineEdit.new()
 	room_code_edit.placeholder_text = "六位房间码"
 	room_code_edit.max_length = 6
-	room_code_edit.custom_minimum_size.y = 52
+	room_code_edit.position = Vector2(45, 82)
+	room_code_edit.size = Vector2(410, 58)
 	room_code_edit.add_theme_font_override("font", main_font)
-	room_code_edit.add_theme_font_size_override("font_size", 22)
-	content.add_child(room_code_edit)
-	var buttons := HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 12)
-	content.add_child(buttons)
-	var create_button := Button.new()
-	create_button.text = "创建房间"
-	create_button.custom_minimum_size = Vector2(244, 58)
-	_style_button(create_button, 23)
-	create_button.pressed.connect(func() -> void: _begin_online_request("create"))
-	buttons.add_child(create_button)
-	var join_button := Button.new()
-	join_button.text = "加入房间"
-	join_button.custom_minimum_size = Vector2(244, 58)
-	_style_button(join_button, 23)
-	join_button.pressed.connect(func() -> void: _begin_online_request("join"))
-	buttons.add_child(join_button)
+	room_code_edit.add_theme_font_size_override("font_size", 24)
+	online_join_view.add_child(room_code_edit)
+	join_room_button = Button.new()
+	join_room_button.text = "加入房间"
+	join_room_button.position = Vector2(100, 162)
+	join_room_button.size = Vector2(300, 62)
+	_style_button(join_room_button, 25)
+	join_room_button.pressed.connect(func() -> void: _begin_online_request("join"))
+	online_join_view.add_child(join_room_button)
+	var join_back := Button.new()
+	join_back.text = "返回上一步"
+	join_back.position = Vector2(100, 294)
+	join_back.size = Vector2(300, 52)
+	_style_button(join_back, 21)
+	join_back.pressed.connect(_show_online_choice)
+	online_join_view.add_child(join_back)
+
+	online_create_view = Control.new()
+	online_create_view.position = Vector2(80, 145)
+	online_create_view.size = Vector2(500, 385)
+	panel.add_child(online_create_view)
+	var target_title := _make_label("选择本局目标分数", 23, INK, HORIZONTAL_ALIGNMENT_CENTER)
+	target_title.position = Vector2(0, 8)
+	target_title.size = Vector2(500, 40)
+	online_create_view.add_child(target_title)
+	online_target_option = OptionButton.new()
+	for score in [1500, 2500, 4000, 6000]:
+		online_target_option.add_item(str(score), score)
+	online_target_option.select(2)
+	online_target_option.position = Vector2(100, 58)
+	online_target_option.size = Vector2(300, 56)
+	_style_button(online_target_option, 24)
+	online_create_view.add_child(online_target_option)
+	create_room_button = Button.new()
+	create_room_button.text = "创建并获取房间码"
+	create_room_button.position = Vector2(80, 136)
+	create_room_button.size = Vector2(340, 62)
+	_style_button(create_room_button, 24)
+	create_room_button.pressed.connect(func() -> void: _begin_online_request("create"))
+	online_create_view.add_child(create_room_button)
+	created_room_code_label = _make_label("", 30, Color("8e2d22"), HORIZONTAL_ALIGNMENT_CENTER)
+	created_room_code_label.position = Vector2(0, 218)
+	created_room_code_label.size = Vector2(500, 50)
+	online_create_view.add_child(created_room_code_label)
+	var create_back := Button.new()
+	create_back.text = "返回上一步"
+	create_back.position = Vector2(100, 294)
+	create_back.size = Vector2(300, 52)
+	_style_button(create_back, 21)
+	create_back.pressed.connect(_show_online_choice)
+	online_create_view.add_child(create_back)
+
 	online_status_label = _make_label("", 20, Color("8e2d22"), HORIZONTAL_ALIGNMENT_CENTER)
-	online_status_label.custom_minimum_size.y = 58
+	online_status_label.position = Vector2(80, 505)
+	online_status_label.size = Vector2(500, 48)
 	online_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	content.add_child(online_status_label)
-	var back_button := Button.new()
-	back_button.text = "返回"
-	back_button.custom_minimum_size.y = 52
-	_style_button(back_button, 21)
-	back_button.pressed.connect(_close_online_lobby)
-	content.add_child(back_button)
+	panel.add_child(online_status_label)
 	online_overlay.visible = false
 
 func _build_settings_overlay() -> void:
@@ -624,8 +689,44 @@ func _bind_network_client() -> void:
 	network_client.server_error.connect(_on_network_error)
 
 func _open_online_lobby() -> void:
-	online_status_label.text = "创建者选择主菜单中的目标分数"
 	online_overlay.visible = true
+	_show_online_choice()
+
+func _show_online_choice() -> void:
+	pending_online_request = ""
+	if network_client != null:
+		network_client.disconnect_from_server()
+	online_choice_view.visible = true
+	online_join_view.visible = false
+	online_create_view.visible = false
+	room_code_edit.clear()
+	created_room_code_label.visible = false
+	online_target_option.disabled = false
+	create_room_button.disabled = false
+	join_room_button.disabled = false
+	_set_online_status("")
+
+func _show_online_join() -> void:
+	online_choice_view.visible = false
+	online_join_view.visible = true
+	online_create_view.visible = false
+	room_code_edit.clear()
+	join_room_button.disabled = false
+	_set_online_status("")
+	room_code_edit.grab_focus()
+
+func _show_online_create() -> void:
+	online_choice_view.visible = false
+	online_join_view.visible = false
+	online_create_view.visible = true
+	created_room_code_label.visible = false
+	online_target_option.disabled = false
+	create_room_button.disabled = false
+	_set_online_status("")
+
+func _set_online_status(message: String) -> void:
+	online_status_label.text = message
+	online_status_label.visible = not message.is_empty()
 
 func _close_online_lobby() -> void:
 	pending_online_request = ""
@@ -635,29 +736,36 @@ func _close_online_lobby() -> void:
 
 func _begin_online_request(kind: String) -> void:
 	if kind == "join" and room_code_edit.text.strip_edges().length() != 6:
-		online_status_label.text = "请输入六位房间码"
+		_set_online_status("请输入六位房间码")
 		return
 	pending_online_request = kind
-	online_status_label.text = "正在连接服务器…"
+	create_room_button.disabled = kind == "create"
+	join_room_button.disabled = kind == "join"
+	_set_online_status("正在连接服务器…")
 	var error := network_client.connect_to_server(Client.DEFAULT_SERVER_URL)
 	if error != OK:
 		pending_online_request = ""
-		online_status_label.text = "连接失败：%s" % error_string(error)
+		create_room_button.disabled = false
+		join_room_button.disabled = false
+		_set_online_status("连接失败：%s" % error_string(error))
 
 func _on_network_connected() -> void:
 	if pending_online_request == "create":
-		network_client.create_room(target_option.get_item_id(target_option.selected))
+		network_client.create_room(online_target_option.get_item_id(online_target_option.selected))
 	elif pending_online_request == "join":
 		network_client.join_room(room_code_edit.text)
 
 func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 	pending_online_request = ""
 	local_player_index = player_index
-	room_code_edit.text = room_code
 	if player_index == 0:
-		online_status_label.text = "房间码：%s\n请把房间码发给另一位玩家" % room_code
+		created_room_code_label.text = "房间码：%s" % room_code
+		created_room_code_label.visible = true
+		online_target_option.disabled = true
+		create_room_button.disabled = true
+		_set_online_status("请把房间码发给另一位玩家，正在等待加入…")
 	else:
-		online_status_label.text = "已加入房间 %s，正在开始…" % room_code
+		_set_online_status("已加入房间 %s，正在开始…" % room_code)
 
 func _on_network_room_ready(snapshot: GameSnapshot) -> void:
 	get_tree().paused = false
@@ -690,13 +798,17 @@ func _on_network_snapshot(snapshot: GameSnapshot) -> void:
 
 func _on_network_disconnected() -> void:
 	if online_overlay != null and online_overlay.visible:
-		online_status_label.text = "与服务器的连接已断开"
+		create_room_button.disabled = false
+		join_room_button.disabled = false
+		_set_online_status("与服务器的连接已断开")
 	elif not local_mode and game_hud.visible:
 		_show_online_disconnect("与服务器的连接已断开")
 
 func _on_network_error(message: String) -> void:
 	if online_overlay.visible:
-		online_status_label.text = message
+		create_room_button.disabled = false
+		join_room_button.disabled = false
+		_set_online_status(message)
 	else:
 		status_label.text = message
 		input_locked = false
@@ -714,7 +826,8 @@ func _show_online_disconnect(message: String) -> void:
 	game_hud.visible = false
 	menu_screen.visible = true
 	online_overlay.visible = true
-	online_status_label.text = message
+	_show_online_choice()
+	_set_online_status(message)
 
 func _show_menu() -> void:
 	get_tree().paused = false
