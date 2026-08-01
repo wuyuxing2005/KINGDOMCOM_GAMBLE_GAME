@@ -6,6 +6,9 @@ build/android/*.apk
 build/android/*.aab
 build/windows/
 build/*.zip
+build/*-smoke.png
+build/*-smoke.png.import
+build/server/
 *.keystore
 *.log
 android/build/.gradle/

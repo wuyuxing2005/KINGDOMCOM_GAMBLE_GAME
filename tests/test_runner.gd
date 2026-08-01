@@ -8,8 +8,8 @@ const AI = preload("res://scripts/controllers/ai_controller.gd")
 var failures := 0
 var checks := 0
 
-func _init() -> void:
-	_run()
+func _initialize() -> void:
+	_run.call_deferred()
 
 func _run() -> void:
 	_test_scoring()

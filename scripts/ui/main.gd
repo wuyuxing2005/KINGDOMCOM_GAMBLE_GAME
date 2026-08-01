@@ -5,6 +5,10 @@ const Action = preload("res://scripts/core/game_action.gd")
 const Human = preload("res://scripts/controllers/human_controller.gd")
 const AI = preload("res://scripts/controllers/ai_controller.gd")
 const Die = preload("res://scripts/ui/die_view.gd")
+const Server = preload("res://scripts/network/multiplayer_server.gd")
+const Client = preload("res://scripts/network/network_client.gd")
+const NetworkProxy = preload("res://scripts/network/network_session_proxy.gd")
+const NetworkControl = preload("res://scripts/controllers/network_controller.gd")
 
 const PLAYER_COLOR := Color("2b7898")
 const AI_COLOR := Color("a13e2d")
@@ -19,9 +23,13 @@ const DIE_POSITIONS: Array[Vector3] = [
 	Vector3(0.55, 0.62, 0.72),
 ]
 
-var session: GameSession
+var session
 var human_controller := Human.new()
 var ai_controller := AI.new()
+var network_client: NetworkClient
+var network_controller: NetworkController
+var local_mode := true
+var local_player_index := 0
 var latest_snapshot: GameSnapshot
 var dice_root: Node3D
 var held_root: Node3D
@@ -38,6 +46,8 @@ var ui_root: Control
 var menu_screen: Control
 var game_hud: Control
 var target_option: OptionButton
+var player_title_label: Label
+var opponent_title_label: Label
 var player_score_label: Label
 var ai_score_label: Label
 var target_label: Label
@@ -49,6 +59,11 @@ var bank_button: Button
 var rules_overlay: Control
 var win_overlay: Control
 var win_title: Label
+var rematch_button: Button
+var online_overlay: Control
+var room_code_edit: LineEdit
+var online_status_label: Label
+var pending_online_request := ""
 var settings_overlay: Control
 var settings_notice: Label
 var settings_return_button: Button
@@ -62,13 +77,32 @@ var parchment_texture: Texture2D
 var main_font: Font
 
 func _ready() -> void:
+	if OS.has_feature("dedicated_server") or "--server" in OS.get_cmdline_user_args():
+		var server := Server.new()
+		add_child(server)
+		var error := server.start(_get_server_port())
+		if error != OK:
+			printerr("服务器启动失败：%s" % error_string(error))
+			get_tree().quit(1)
+		return
 	parchment_texture = load("res://assets/ui/parchment_panel.png")
 	main_font = load("res://assets/fonts/LXGWWenKai-Regular.ttf")
 	_build_audio()
 	_build_world()
 	_build_ui()
+	network_client = Client.new()
+	network_client.name = "NetworkClient"
+	add_child(network_client)
+	network_controller = NetworkControl.new(network_client)
+	_bind_network_client()
 	human_controller.action_requested.connect(_on_controller_action)
 	_show_menu()
+
+func _get_server_port() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--port="):
+			return int(argument.trim_prefix("--port="))
+	return 9080
 
 func _input(event: InputEvent) -> void:
 	var pointer_position := Vector2.ZERO
@@ -197,6 +231,7 @@ func _build_ui() -> void:
 	_build_menu()
 	_build_game_hud()
 	_build_rules_overlay()
+	_build_online_overlay()
 	_build_settings_overlay()
 	_build_win_overlay()
 
@@ -214,14 +249,14 @@ func _build_menu() -> void:
 
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-285, -285)
-	panel.size = Vector2(570, 570)
+	panel.position = Vector2(-285, -300)
+	panel.size = Vector2(570, 600)
 	menu_screen.add_child(panel)
 
 	var content := VBoxContainer.new()
-	content.position = Vector2(76, 64)
-	content.size = Vector2(418, 450)
-	content.add_theme_constant_override("separation", 18)
+	content.position = Vector2(76, 48)
+	content.size = Vector2(418, 505)
+	content.add_theme_constant_override("separation", 11)
 	panel.add_child(content)
 
 	var title := _make_label("中世纪骰局", 48, INK, HORIZONTAL_ALIGNMENT_CENTER)
@@ -238,11 +273,17 @@ func _build_menu() -> void:
 	target_option.custom_minimum_size = Vector2(0, 58)
 	content.add_child(target_option)
 	var start_button := Button.new()
-	start_button.text = "开始对局"
+	start_button.text = "单人对电脑"
 	start_button.custom_minimum_size.y = 62
 	_style_button(start_button, 28)
 	start_button.pressed.connect(_start_selected_game)
 	content.add_child(start_button)
+	var online_button := Button.new()
+	online_button.text = "联机对战"
+	online_button.custom_minimum_size.y = 56
+	_style_button(online_button, 25)
+	online_button.pressed.connect(_open_online_lobby)
+	content.add_child(online_button)
 	var settings_button := Button.new()
 	settings_button.text = "设置"
 	settings_button.custom_minimum_size.y = 48
@@ -266,10 +307,10 @@ func _build_game_hud() -> void:
 	player_panel.position = Vector2(20, 18)
 	player_panel.size = Vector2(300, 132)
 	game_hud.add_child(player_panel)
-	var player_title := _make_label("玩家", 24, PLAYER_COLOR)
-	player_title.position = Vector2(48, 26)
-	player_title.size = Vector2(190, 34)
-	player_panel.add_child(player_title)
+	player_title_label = _make_label("玩家", 24, PLAYER_COLOR)
+	player_title_label.position = Vector2(48, 26)
+	player_title_label.size = Vector2(190, 34)
+	player_panel.add_child(player_title_label)
 	player_score_label = _make_label("0", 42, PLAYER_COLOR)
 	player_score_label.position = Vector2(48, 59)
 	player_score_label.size = Vector2(200, 50)
@@ -280,10 +321,10 @@ func _build_game_hud() -> void:
 	ai_panel.position = Vector2(-320, 18)
 	ai_panel.size = Vector2(300, 132)
 	game_hud.add_child(ai_panel)
-	var ai_title := _make_label("电脑", 24, AI_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
-	ai_title.position = Vector2(58, 26)
-	ai_title.size = Vector2(190, 34)
-	ai_panel.add_child(ai_title)
+	opponent_title_label = _make_label("电脑", 24, AI_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
+	opponent_title_label.position = Vector2(58, 26)
+	opponent_title_label.size = Vector2(190, 34)
+	ai_panel.add_child(opponent_title_label)
 	ai_score_label = _make_label("0", 42, AI_COLOR, HORIZONTAL_ALIGNMENT_RIGHT)
 	ai_score_label.position = Vector2(48, 59)
 	ai_score_label.size = Vector2(200, 50)
@@ -352,6 +393,7 @@ func _build_rules_overlay() -> void:
 	rules_overlay = Control.new()
 	rules_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	rules_overlay.visible = false
+
 	ui_root.add_child(rules_overlay)
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.72)
@@ -384,6 +426,66 @@ func _build_rules_overlay() -> void:
 	_style_button(close, 21)
 	close.pressed.connect(_toggle_rules)
 	panel.add_child(close)
+
+func _build_online_overlay() -> void:
+	online_overlay = Control.new()
+	online_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	online_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui_root.add_child(online_overlay)
+	var shade := ColorRect.new()
+	shade.color = Color(0.02, 0.01, 0.0, 0.72)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	online_overlay.add_child(shade)
+	var panel := _make_parchment_panel()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-330, -300)
+	panel.size = Vector2(660, 600)
+	online_overlay.add_child(panel)
+	var content := VBoxContainer.new()
+	content.position = Vector2(80, 55)
+	content.size = Vector2(500, 490)
+	content.add_theme_constant_override("separation", 12)
+	panel.add_child(content)
+	var title := _make_label("联机对战", 40, INK, HORIZONTAL_ALIGNMENT_CENTER)
+	title.custom_minimum_size.y = 58
+	content.add_child(title)
+	var server_notice := _make_label("使用中世纪骰局公共服务器", 20, Color("725037"), HORIZONTAL_ALIGNMENT_CENTER)
+	server_notice.custom_minimum_size.y = 38
+	content.add_child(server_notice)
+	content.add_child(_make_label("房间码（加入房间时填写）", 21, INK))
+	room_code_edit = LineEdit.new()
+	room_code_edit.placeholder_text = "六位房间码"
+	room_code_edit.max_length = 6
+	room_code_edit.custom_minimum_size.y = 52
+	room_code_edit.add_theme_font_override("font", main_font)
+	room_code_edit.add_theme_font_size_override("font_size", 22)
+	content.add_child(room_code_edit)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 12)
+	content.add_child(buttons)
+	var create_button := Button.new()
+	create_button.text = "创建房间"
+	create_button.custom_minimum_size = Vector2(244, 58)
+	_style_button(create_button, 23)
+	create_button.pressed.connect(func() -> void: _begin_online_request("create"))
+	buttons.add_child(create_button)
+	var join_button := Button.new()
+	join_button.text = "加入房间"
+	join_button.custom_minimum_size = Vector2(244, 58)
+	_style_button(join_button, 23)
+	join_button.pressed.connect(func() -> void: _begin_online_request("join"))
+	buttons.add_child(join_button)
+	online_status_label = _make_label("", 20, Color("8e2d22"), HORIZONTAL_ALIGNMENT_CENTER)
+	online_status_label.custom_minimum_size.y = 58
+	online_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(online_status_label)
+	var back_button := Button.new()
+	back_button.text = "返回"
+	back_button.custom_minimum_size.y = 52
+	_style_button(back_button, 21)
+	back_button.pressed.connect(_close_online_lobby)
+	content.add_child(back_button)
+	online_overlay.visible = false
 
 func _build_settings_overlay() -> void:
 	settings_overlay = Control.new()
@@ -467,13 +569,13 @@ func _build_win_overlay() -> void:
 	win_title.position = Vector2(75, 78)
 	win_title.size = Vector2(450, 72)
 	panel.add_child(win_title)
-	var rematch := Button.new()
-	rematch.text = "再来一局"
-	rematch.position = Vector2(150, 192)
-	rematch.size = Vector2(300, 62)
-	_style_button(rematch, 26)
-	rematch.pressed.connect(_start_selected_game)
-	panel.add_child(rematch)
+	rematch_button = Button.new()
+	rematch_button.text = "再来一局"
+	rematch_button.position = Vector2(150, 192)
+	rematch_button.size = Vector2(300, 62)
+	_style_button(rematch_button, 26)
+	rematch_button.pressed.connect(_on_rematch_pressed)
+	panel.add_child(rematch_button)
 	var menu := Button.new()
 	menu.text = "返回菜单"
 	menu.position = Vector2(150, 274)
@@ -484,6 +586,10 @@ func _build_win_overlay() -> void:
 
 func _start_selected_game() -> void:
 	get_tree().paused = false
+	local_mode = true
+	local_player_index = 0
+	player_title_label.text = "玩家"
+	opponent_title_label.text = "电脑"
 	var target := target_option.get_item_id(target_option.selected)
 	game_generation += 1
 	_clear_all_dice()
@@ -504,11 +610,121 @@ func _start_selected_game() -> void:
 	status_label.text = "玩家先手"
 	_start_turn_after_delay(game_generation, 0.45)
 
+func _bind_network_client() -> void:
+	network_client.connected.connect(_on_network_connected)
+	network_client.disconnected.connect(_on_network_disconnected)
+	network_client.room_assigned.connect(_on_network_room_assigned)
+	network_client.room_ready.connect(_on_network_room_ready)
+	network_client.snapshot_received.connect(_on_network_snapshot)
+	network_client.rolled.connect(_on_rolled)
+	network_client.busted.connect(_on_busted)
+	network_client.hot_dice.connect(_on_hot_dice)
+	network_client.game_finished.connect(_on_game_finished)
+	network_client.opponent_left.connect(_on_opponent_left)
+	network_client.server_error.connect(_on_network_error)
+
+func _open_online_lobby() -> void:
+	online_status_label.text = "创建者选择主菜单中的目标分数"
+	online_overlay.visible = true
+
+func _close_online_lobby() -> void:
+	pending_online_request = ""
+	if network_client != null:
+		network_client.disconnect_from_server()
+	online_overlay.visible = false
+
+func _begin_online_request(kind: String) -> void:
+	if kind == "join" and room_code_edit.text.strip_edges().length() != 6:
+		online_status_label.text = "请输入六位房间码"
+		return
+	pending_online_request = kind
+	online_status_label.text = "正在连接服务器…"
+	var error := network_client.connect_to_server(Client.DEFAULT_SERVER_URL)
+	if error != OK:
+		pending_online_request = ""
+		online_status_label.text = "连接失败：%s" % error_string(error)
+
+func _on_network_connected() -> void:
+	if pending_online_request == "create":
+		network_client.create_room(target_option.get_item_id(target_option.selected))
+	elif pending_online_request == "join":
+		network_client.join_room(room_code_edit.text)
+
+func _on_network_room_assigned(room_code: String, player_index: int) -> void:
+	pending_online_request = ""
+	local_player_index = player_index
+	room_code_edit.text = room_code
+	if player_index == 0:
+		online_status_label.text = "房间码：%s\n请把房间码发给另一位玩家" % room_code
+	else:
+		online_status_label.text = "已加入房间 %s，正在开始…" % room_code
+
+func _on_network_room_ready(snapshot: GameSnapshot) -> void:
+	get_tree().paused = false
+	local_mode = false
+	game_generation += 1
+	_clear_all_dice()
+	menu_screen.visible = false
+	online_overlay.visible = false
+	game_hud.visible = true
+	win_overlay.visible = false
+	rules_overlay.visible = false
+	settings_overlay.visible = false
+	session = NetworkProxy.new()
+	session.apply_snapshot(snapshot)
+	latest_snapshot = snapshot
+	player_title_label.text = "你"
+	opponent_title_label.text = "对手"
+	input_locked = true
+	_on_state_changed(snapshot)
+	status_label.text = "对局开始，等待服务器掷骰"
+
+func _on_network_snapshot(snapshot: GameSnapshot) -> void:
+	if local_mode or session == null:
+		return
+	session.apply_snapshot(snapshot)
+	if snapshot.phase == Session.Phase.AWAITING_ROLL:
+		input_locked = true
+		_clear_all_dice()
+	_on_state_changed(snapshot)
+
+func _on_network_disconnected() -> void:
+	if online_overlay != null and online_overlay.visible:
+		online_status_label.text = "与服务器的连接已断开"
+	elif not local_mode and game_hud.visible:
+		_show_online_disconnect("与服务器的连接已断开")
+
+func _on_network_error(message: String) -> void:
+	if online_overlay.visible:
+		online_status_label.text = message
+	else:
+		status_label.text = message
+		input_locked = false
+		_update_buttons()
+
+func _on_opponent_left() -> void:
+	_show_online_disconnect("对手已离开房间")
+
+func _show_online_disconnect(message: String) -> void:
+	game_generation += 1
+	input_locked = true
+	session = null
+	latest_snapshot = null
+	_clear_all_dice()
+	game_hud.visible = false
+	menu_screen.visible = true
+	online_overlay.visible = true
+	online_status_label.text = message
+
 func _show_menu() -> void:
 	get_tree().paused = false
 	game_generation += 1
 	input_locked = true
 	session = null
+	local_mode = true
+	local_player_index = 0
+	if network_client != null:
+		network_client.disconnect_from_server()
 	latest_snapshot = null
 	_clear_all_dice()
 	menu_screen.visible = true
@@ -516,6 +732,8 @@ func _show_menu() -> void:
 	rules_overlay.visible = false
 	win_overlay.visible = false
 	settings_overlay.visible = false
+	if online_overlay != null:
+		online_overlay.visible = false
 
 func _open_settings() -> void:
 	settings_notice.text = "当前对局已暂停，背景音乐将继续播放"
@@ -552,6 +770,9 @@ func _start_turn_after_delay(generation: int, delay: float) -> void:
 	await get_tree().create_timer(delay).timeout
 	if generation != game_generation or session == null or session.phase != Session.Phase.AWAITING_ROLL:
 		return
+	if not local_mode:
+		status_label.text = "等待服务器掷骰"
+		return
 	input_locked = true
 	status_label.text = "玩家掷骰" if session.current_player == 0 else "电脑掷骰"
 	session.apply_action(Action.roll())
@@ -559,28 +780,34 @@ func _start_turn_after_delay(generation: int, delay: float) -> void:
 func _on_controller_action(action: GameAction) -> void:
 	if session == null:
 		return
-	var succeeded := session.apply_action(action)
+	if not local_mode:
+		network_controller.submit_to_server(action)
+		return
+	var succeeded: bool = session.apply_action(action)
 	if succeeded and action.type == GameAction.Type.BANK and session.phase != Session.Phase.GAME_OVER:
 		_clear_all_dice()
 		_start_turn_after_delay(game_generation, 0.65)
 
 func _on_state_changed(snapshot: GameSnapshot) -> void:
 	latest_snapshot = snapshot
-	player_score_label.text = str(snapshot.scores[0])
-	ai_score_label.text = str(snapshot.scores[1])
+	var opponent_index := 1 - local_player_index
+	player_score_label.text = str(snapshot.scores[local_player_index])
+	ai_score_label.text = str(snapshot.scores[opponent_index])
 	target_label.text = "目标：%d" % snapshot.target_score
 	turn_label.text = "本轮：%d" % snapshot.turn_score
 	selected_label.text = "选定：%d" % snapshot.selected_score
 	_update_die_selection()
 	_update_held_dice(snapshot.held_dice)
 	_update_buttons()
-	if snapshot.current_player == 0 and snapshot.phase == Session.Phase.AWAITING_SELECTION and not input_locked:
+	if snapshot.current_player == local_player_index and snapshot.phase == Session.Phase.AWAITING_SELECTION and not input_locked:
 		if snapshot.selected_indices.is_empty():
 			status_label.text = "选择得分骰"
 		elif snapshot.selected_score > 0:
 			status_label.text = "当前选择可得 %d 分" % snapshot.selected_score
 		else:
 			status_label.text = "当前组合暂不能计分，请继续选择"
+	elif not local_mode and snapshot.phase == Session.Phase.AWAITING_SELECTION and rolling_count == 0:
+		status_label.text = "等待对手选择" if snapshot.current_player != local_player_index else "选择得分骰"
 
 func _on_rolled(values: Array[int]) -> void:
 	input_locked = true
@@ -607,15 +834,21 @@ func _on_die_roll_finished(_index: int) -> void:
 	if rolling_count > 0:
 		return
 	if pending_bust or (session != null and session.phase == Session.Phase.BUSTED):
-		_resolve_bust_after_delay(game_generation)
-	elif session != null and session.current_player == 1:
+		if local_mode:
+			_resolve_bust_after_delay(game_generation)
+		else:
+			status_label.text = "爆骰！本轮得分清零"
+	elif local_mode and session != null and session.current_player == 1:
 		_run_ai_turn(game_generation)
-	else:
+	elif session != null and session.current_player == local_player_index:
 		input_locked = false
 		status_label.text = "选择得分骰"
 		focused_die = clampi(focused_die, 0, maxi(0, die_views.size() - 1))
 		_update_die_selection()
 		_update_buttons()
+	else:
+		input_locked = true
+		status_label.text = "等待对手选择"
 
 func _resolve_bust_after_delay(generation: int) -> void:
 	status_label.text = "爆骰！本轮得分清零"
@@ -628,7 +861,7 @@ func _resolve_bust_after_delay(generation: int) -> void:
 
 func _run_ai_turn(generation: int) -> void:
 	await get_tree().create_timer(0.5).timeout
-	if generation != game_generation or session == null or session.current_player != 1 or session.phase != Session.Phase.AWAITING_SELECTION:
+	if not local_mode or generation != game_generation or session == null or session.current_player != 1 or session.phase != Session.Phase.AWAITING_SELECTION:
 		return
 	var indices := ai_controller.choose_selection(session.current_roll)
 	session.apply_action(Action.set_selection(indices))
@@ -636,8 +869,8 @@ func _run_ai_turn(generation: int) -> void:
 	await get_tree().create_timer(0.7).timeout
 	if generation != game_generation or session == null:
 		return
-	var projected := session.turn_score + session.get_selected_score()
-	var remaining := session.current_roll.size() - session.selected_indices.size()
+	var projected: int = session.turn_score + session.get_selected_score()
+	var remaining: int = session.current_roll.size() - session.selected_indices.size()
 	if ai_controller.should_bank(projected, remaining, session.scores, session.target_score):
 		status_label.text = "电脑停手得分"
 		input_locked = true
@@ -652,8 +885,16 @@ func _run_ai_turn(generation: int) -> void:
 func _on_game_finished(winner_index: int) -> void:
 	input_locked = true
 	status_label.text = "对局结束"
-	win_title.text = "你赢了！" if winner_index == 0 else "电脑获胜"
+	win_title.text = "你赢了！" if winner_index == local_player_index else ("电脑获胜" if local_mode else "对手获胜")
+	rematch_button.text = "再来一局" if local_mode else "返回联机大厅"
 	_show_win_after_delay(game_generation)
+
+func _on_rematch_pressed() -> void:
+	if local_mode:
+		_start_selected_game()
+	else:
+		_show_menu()
+		_open_online_lobby()
 
 func _show_win_after_delay(generation: int) -> void:
 	await get_tree().create_timer(0.7).timeout
@@ -675,7 +916,8 @@ func _pick_die_at_screen(screen_position: Vector2) -> int:
 func _toggle_die(index: int) -> void:
 	if session == null or index < 0 or index >= session.current_roll.size():
 		return
-	var indices := session.selected_indices.duplicate()
+	var indices: Array[int] = []
+	indices.assign(session.selected_indices)
 	if indices.has(index):
 		indices.erase(index)
 	else:
@@ -726,7 +968,7 @@ func _update_buttons() -> void:
 	bank_button.disabled = not enabled
 
 func _can_human_act() -> bool:
-	return session != null and not input_locked and session.current_player == 0 and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible and not settings_overlay.visible
+	return session != null and not input_locked and session.current_player == local_player_index and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible and not settings_overlay.visible
 
 func _toggle_rules() -> void:
 	if not game_hud.visible:

@@ -1,6 +1,6 @@
 # 中世纪骰局
 
-这是一个使用 Godot 4.6.1 与 GDScript 制作的横屏骰子游戏。首版为玩家对电脑，规则层与画面层相互独立；骰子、木桌、羊皮纸和应用图标均为本项目原创素材，没有复制或分发《天国：拯救 2》的资源。
+这是一个使用 Godot 4.6.1 与 GDScript 制作的横屏骰子游戏，支持玩家对电脑和房间码双人联机。规则层与画面层相互独立；骰子、木桌、羊皮纸和应用图标均为本项目原创素材，没有复制或分发《天国：拯救 2》的资源。
 
 ## 打开与运行
 
@@ -9,6 +9,16 @@
 3. 按 F6/F5 或点击编辑器右上角运行按钮即可开始。
 
 默认目标为 4000 分，主菜单也可选择 1500、2500 或 6000 分。
+
+## 联机对战
+
+联机采用服务器权威模式：客户端只发送选择、继续投掷和停手动作，骰子点数、动作合法性、回合切换及胜负全部由服务器决定。
+
+1. 在主菜单选择目标分数，进入“联机对战”。
+2. 第一名玩家点击“创建房间”，将六位房间码发给第二名玩家。
+3. 第二名玩家输入房间码并点击“加入房间”，两人到齐后自动开局。
+
+客户端内置公共联机服务器地址，普通玩家不需要填写或配置服务器。
 
 ## 操作
 
@@ -39,6 +49,14 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 
 测试覆盖计分组合、非法混选、爆骰、热骰、状态切换、AI 决策和全部 46,656 种六骰结果。
 
+双客户端联机测试：
+
+```powershell
+& "D:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --headless --path "D:\shaizi_game" --script "res://tests/network_smoke.gd"
+```
+
+该测试会在本机启动临时服务器和两个客户端，验证创建房间、加入房间、权威掷骰、选择同步和停手结算。
+
 ## Windows 导出
 
 工程已配置 `Windows Desktop` Release 导出预设，目标架构为 x86_64，游戏资源嵌入单个 EXE。命令行导出：
@@ -51,7 +69,7 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 
 ## Android 导出
 
-工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.0.1`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64。
+工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.1.0`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64，并已启用联网权限。
 
 本机工具链位于被 Git 忽略的 `.tools` 目录，包含 JDK 17、Android SDK Platform/Build Tools 35、NDK 28.1 与 CMake 3.10.2。换机后应在 Godot 的“编辑器设置 → 导出 → Android”中重新填写 JDK 和 Android SDK 路径。
 
@@ -66,6 +84,31 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 ```powershell
 & ".tools\android-sdk\platform-tools\adb.exe" install -r "build\android\medieval_dice-debug.apk"
 ```
+
+## 联机服务器
+
+推荐首发使用一台 Linux x86_64 云服务器：
+
+- 最低：1 vCPU、1 GB 内存、10 GB 可用磁盘、公网 IPv4。
+- 建议：2 vCPU、2 GB 内存、20 GB SSD、5 Mbps 或更高公网带宽、Ubuntu 24.04 LTS。
+- 测试阶段只需开放 TCP 9080；正式发布建议只开放 80/443，由 Caddy 或 Nginx 将 `wss://` 反向代理到本机 `127.0.0.1:9080`。
+
+这是一款双人回合制游戏，单房间消息量很小，首发不需要游戏专用高频 CPU、数据库或负载均衡。若玩家主要在中国大陆，优先选择距离玩家近的大陆节点；若暂不处理大陆域名备案，可先用香港节点测试，但需要实际测量玩家网络延迟和丢包。
+
+工程已配置 `Linux Server` 导出预设。导出命令：
+
+```powershell
+& "D:\SteamLibrary\steamapps\common\Godot Engine\godot.windows.opt.tools.64.exe" --headless --path "D:\shaizi_game" --export-release "Linux Server" "D:\shaizi_game\build\server\medieval_dice_server.x86_64"
+```
+
+上传后启动：
+
+```bash
+chmod +x /opt/medieval-dice/medieval_dice_server.x86_64
+/opt/medieval-dice/medieval_dice_server.x86_64 -- --port=9080
+```
+
+`deploy/server/medieval-dice.service` 是 systemd 常驻服务模板，`deploy/server/Caddyfile` 是启用 TLS 的域名反向代理模板。替换其中的安装路径、用户和域名后再启用。
 
 ## 素材与许可
 
