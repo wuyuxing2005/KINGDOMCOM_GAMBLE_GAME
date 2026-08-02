@@ -59,6 +59,36 @@ func _run() -> void:
 		printerr("returning to the game did not resume the preserved session")
 		quit(1)
 		return
+	var network_session := NetworkSessionProxy.new()
+	var network_snapshot := GameSnapshot.new()
+	network_snapshot.target_score = 4000
+	network_snapshot.scores.assign([0, 0])
+	network_snapshot.phase = GameSession.Phase.AWAITING_SELECTION
+	network_session.apply_snapshot(network_snapshot)
+	main.local_mode = false
+	main.session = network_session
+	main.latest_snapshot = network_snapshot
+	main._open_settings()
+	if paused or not main.settings_overlay.visible or main.settings_notice.text != "联机对局不会暂停":
+		printerr("online settings unexpectedly paused the game")
+		quit(1)
+		return
+	var updated_snapshot := GameSnapshot.new()
+	updated_snapshot.target_score = 4000
+	updated_snapshot.scores.assign([150, 0])
+	updated_snapshot.phase = GameSession.Phase.AWAITING_SELECTION
+	main._on_network_snapshot(updated_snapshot)
+	if main.player_score_label.text != "150" or not main.settings_overlay.visible:
+		printerr("online state did not continue updating behind settings")
+		quit(1)
+		return
+	main._close_settings()
+	if paused or main.settings_overlay.visible:
+		printerr("closing online settings changed the running state")
+		quit(1)
+		return
+	main.local_mode = true
+	main.session = active_session
 	main._open_settings()
 	main._show_menu()
 	if paused or main.session != null or not main.menu_screen.visible or main.settings_overlay.visible or not main.background_music.playing or absf(main.background_music.volume_db - linear_to_db(0.25)) > 0.01:
