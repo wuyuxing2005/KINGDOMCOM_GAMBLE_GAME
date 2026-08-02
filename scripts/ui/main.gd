@@ -9,6 +9,7 @@ const Server = preload("res://scripts/network/multiplayer_server.gd")
 const Client = preload("res://scripts/network/network_client.gd")
 const NetworkProxy = preload("res://scripts/network/network_session_proxy.gd")
 const NetworkControl = preload("res://scripts/controllers/network_controller.gd")
+const UpdateManager = preload("res://scripts/update/update_manager.gd")
 
 const PLAYER_COLOR := Color("2b7898")
 const AI_COLOR := Color("a13e2d")
@@ -86,6 +87,9 @@ var music_volume_slider: HSlider
 var music_volume_label: Label
 var fullscreen_toggle: Button
 var background_music: AudioStreamPlayer
+var update_manager: AppUpdateManager
+var update_button: Button
+var update_status_label: Label
 
 var parchment_texture: Texture2D
 var main_font: Font
@@ -104,6 +108,7 @@ func _ready() -> void:
 	_build_audio()
 	_build_world()
 	_build_ui()
+	_setup_update_manager()
 	network_client = Client.new()
 	network_client.name = "NetworkClient"
 	add_child(network_client)
@@ -261,6 +266,21 @@ func _build_menu() -> void:
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	menu_screen.add_child(shade)
 
+	update_button = Button.new()
+	update_button.text = "检查更新"
+	update_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	update_button.position = Vector2(-220, 20)
+	update_button.size = Vector2(200, 52)
+	_style_button(update_button, 21)
+	update_button.pressed.connect(_check_for_update)
+	menu_screen.add_child(update_button)
+	update_status_label = _make_label("v%s" % ProjectSettings.get_setting("application/config/version", "0.0.0"), 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
+	update_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	update_status_label.position = Vector2(-280, 78)
+	update_status_label.size = Vector2(260, 52)
+	update_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	menu_screen.add_child(update_status_label)
+
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.position = Vector2(-285, -300)
@@ -310,6 +330,26 @@ func _build_menu() -> void:
 	_style_button(exit_button, 22)
 	exit_button.pressed.connect(func() -> void: get_tree().quit())
 	content.add_child(exit_button)
+
+
+func _setup_update_manager() -> void:
+	update_manager = UpdateManager.new()
+	update_manager.status_changed.connect(_on_update_status_changed)
+	update_manager.busy_changed.connect(_on_update_busy_changed)
+	add_child(update_manager)
+
+
+func _check_for_update() -> void:
+	update_manager.check_and_install()
+
+
+func _on_update_status_changed(message: String) -> void:
+	update_status_label.text = message
+
+
+func _on_update_busy_changed(is_busy: bool) -> void:
+	update_button.disabled = is_busy
+	update_button.text = "正在更新…" if is_busy else "检查更新"
 
 func _build_game_hud() -> void:
 	game_hud = Control.new()
