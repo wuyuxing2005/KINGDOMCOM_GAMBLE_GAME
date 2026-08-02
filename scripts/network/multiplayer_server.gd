@@ -80,6 +80,7 @@ func _join_room(sender: int, code: String) -> void:
 	peer_rooms[sender] = code
 	_send(sender, {"type": Protocol.ROOM_JOINED, "room_code": code, "player_index": 1})
 	var session: GameSession = room["session"]
+	session.current_player = rng.randi_range(0, 1)
 	_broadcast(code, {"type": Protocol.ROOM_READY, "snapshot": Protocol.snapshot_to_dictionary(session.get_snapshot())})
 	call_deferred("_roll_room", code)
 
@@ -134,7 +135,7 @@ func _on_session_finished(winner_index: int, code: String) -> void:
 	_broadcast(code, {"type": Protocol.GAME_FINISHED, "winner_index": winner_index})
 
 func _resolve_bust_after_delay(code: String, expected_session: GameSession) -> void:
-	await get_tree().create_timer(1.15).timeout
+	await get_tree().create_timer(3.0).timeout
 	if not _room_has_session(code, expected_session):
 		return
 	expected_session.resolve_bust()
