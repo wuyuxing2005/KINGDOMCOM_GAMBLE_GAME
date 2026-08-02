@@ -19,7 +19,7 @@ func _run() -> void:
 		return
 	var release := {
 		"assets": [
-			{"name": "medieval_dice-debug.apk", "browser_download_url": "https://example.test/game.apk"},
+			{"name": "medieval_dice-debug.apk", "browser_download_url": "https://example.test/game.apk", "fallback_download_url": "https://example.test/fallback.apk"},
 			{"name": "medieval_dice-windows-x86_64.zip", "browser_download_url": "https://example.test/game.zip"},
 		]
 	}
@@ -28,6 +28,9 @@ func _run() -> void:
 		return
 	if UpdateManager.get_asset_url(release, "Windows") != "https://example.test/game.zip":
 		_fail("Windows release asset selection failed")
+		return
+	if UpdateManager.get_asset_fallback_url(release, "Android") != "https://example.test/fallback.apk":
+		_fail("Android fallback release asset selection failed")
 		return
 	if UpdateManager.get_asset_url(release, "Linux") != "":
 		_fail("unsupported platform unexpectedly selected an update asset")
