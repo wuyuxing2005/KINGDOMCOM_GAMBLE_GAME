@@ -75,7 +75,7 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 
 ## Android 导出
 
-工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.1.4`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64，并已启用联网与请求系统安装 APK 的权限。
+工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，当前测试版本为 `1.1.5-test`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64，并已启用联网与请求系统安装 APK 的权限。
 
 本机工具链位于被 Git 忽略的 `.tools` 目录，包含 JDK 17、Android SDK Platform/Build Tools 35、NDK 28.1 与 CMake 3.10.2。换机后应在 Godot 的“编辑器设置 → 导出 → Android”中重新填写 JDK 和 Android SDK 路径。
 
