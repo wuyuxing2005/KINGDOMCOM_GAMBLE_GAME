@@ -7,6 +7,9 @@ signal connected
 signal disconnected
 signal room_assigned(room_code: String, player_index: int)
 signal room_ready(snapshot: GameSnapshot)
+signal rematch_waiting
+signal rematch_choose_target
+signal rematch_started(snapshot: GameSnapshot)
 signal snapshot_received(snapshot: GameSnapshot)
 signal rolled(values: Array[int])
 signal busted(player_index: int)
@@ -46,6 +49,12 @@ func join_room(room_code: String) -> void:
 func send_action(action: GameAction) -> void:
 	_send({"type": Protocol.ACTION, "action": Protocol.action_to_dictionary(action)})
 
+func request_rematch() -> void:
+	_send({"type": Protocol.REMATCH_REQUEST})
+
+func confirm_rematch(target_score: int) -> void:
+	_send({"type": Protocol.REMATCH_CONFIRM, "target_score": target_score})
+
 func _process(_delta: float) -> void:
 	if peer == null:
 		return
@@ -69,6 +78,12 @@ func _handle_message(message: Dictionary) -> void:
 			room_assigned.emit(String(message.get("room_code", "")), int(message.get("player_index", 0)))
 		Protocol.ROOM_READY:
 			room_ready.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
+		Protocol.REMATCH_WAITING:
+			rematch_waiting.emit()
+		Protocol.REMATCH_CHOOSE_TARGET:
+			rematch_choose_target.emit()
+		Protocol.REMATCH_STARTED:
+			rematch_started.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
 		Protocol.SNAPSHOT:
 			snapshot_received.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
 		Protocol.ROLLED:

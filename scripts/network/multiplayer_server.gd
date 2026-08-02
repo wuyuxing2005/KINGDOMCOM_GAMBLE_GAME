@@ -47,6 +47,10 @@ func _handle_message(sender: int, message: Dictionary) -> void:
 			_join_room(sender, String(message.get("room_code", "")).strip_edges().to_upper())
 		Protocol.ACTION:
 			_handle_action(sender, message.get("action", {}))
+		Protocol.REMATCH_REQUEST:
+			_handle_rematch_request(sender)
+		Protocol.REMATCH_CONFIRM:
+			_handle_rematch_confirm(sender, int(message.get("target_score", 0)))
 		_:
 			_send_error(sender, "未知请求")
 
@@ -59,7 +63,7 @@ func _create_room(sender: int, target_score: int) -> void:
 		return
 	var code := _new_room_code()
 	var session: GameSession = Session.new(target_score, session_seed)
-	rooms[code] = {"players": [sender], "session": session}
+	rooms[code] = {"players": [sender], "session": session, "rematch_players": []}
 	peer_rooms[sender] = code
 	_bind_session(code, session)
 	_send(sender, {"type": Protocol.ROOM_CREATED, "room_code": code, "player_index": 0})
@@ -109,6 +113,60 @@ func _handle_action(sender: int, action_data: Dictionary) -> void:
 	if action.type == GameAction.Type.BANK and session.phase != GameSession.Phase.GAME_OVER:
 		_roll_room_after_delay(code, session, 0.65)
 
+func _handle_rematch_request(sender: int) -> void:
+	if not peer_rooms.has(sender):
+		_send_error(sender, "你不在对局房间中")
+		return
+	var code: String = peer_rooms[sender]
+	if not rooms.has(code):
+		_send_error(sender, "房间已关闭")
+		return
+	var room: Dictionary = rooms[code]
+	var players: Array = room["players"]
+	var player_index := players.find(sender)
+	var session: GameSession = room["session"]
+	if players.size() != 2 or player_index < 0:
+		_send_error(sender, "对方已退出")
+		return
+	if session.phase != GameSession.Phase.GAME_OVER:
+		_send_error(sender, "当前对局尚未结束")
+		return
+	var rematch_players: Array = room["rematch_players"]
+	if not rematch_players.has(player_index):
+		rematch_players.append(player_index)
+	if rematch_players.size() < 2:
+		_send(sender, {"type": Protocol.REMATCH_WAITING})
+	else:
+		_broadcast(code, {"type": Protocol.REMATCH_CHOOSE_TARGET})
+
+func _handle_rematch_confirm(sender: int, target_score: int) -> void:
+	if not peer_rooms.has(sender):
+		_send_error(sender, "你不在对局房间中")
+		return
+	var code: String = peer_rooms[sender]
+	if not rooms.has(code):
+		_send_error(sender, "房间已关闭")
+		return
+	var room: Dictionary = rooms[code]
+	var players: Array = room["players"]
+	if players.find(sender) != 0:
+		_send_error(sender, "只有房主可以选择目标分数")
+		return
+	var session: GameSession = room["session"]
+	if session.phase != GameSession.Phase.GAME_OVER or room["rematch_players"].size() != 2:
+		_send_error(sender, "双方尚未确认再来一局")
+		return
+	if not target_score in [1500, 2500, 4000, 6000]:
+		_send_error(sender, "目标分数无效")
+		return
+	var new_session: GameSession = Session.new(target_score, session_seed)
+	new_session.current_player = rng.randi_range(0, 1)
+	room["session"] = new_session
+	room["rematch_players"] = []
+	_bind_session(code, new_session)
+	_broadcast(code, {"type": Protocol.REMATCH_STARTED, "snapshot": Protocol.snapshot_to_dictionary(new_session.get_snapshot())})
+	call_deferred("_roll_room", code)
+
 func _bind_session(code: String, session: GameSession) -> void:
 	session.state_changed.connect(_on_session_state.bind(code))
 	session.rolled.connect(_on_session_rolled.bind(code))
@@ -132,6 +190,8 @@ func _on_session_hot_dice(player_index: int, code: String) -> void:
 	_broadcast(code, {"type": Protocol.HOT_DICE, "player_index": player_index})
 
 func _on_session_finished(winner_index: int, code: String) -> void:
+	if rooms.has(code):
+		rooms[code]["rematch_players"] = []
 	_broadcast(code, {"type": Protocol.GAME_FINISHED, "winner_index": winner_index})
 
 func _resolve_bust_after_delay(code: String, expected_session: GameSession) -> void:

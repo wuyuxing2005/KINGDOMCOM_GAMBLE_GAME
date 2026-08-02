@@ -60,6 +60,12 @@ var rules_overlay: Control
 var win_overlay: Control
 var win_title: Label
 var rematch_button: Button
+var rematch_status_label: Label
+var rematch_target_option: OptionButton
+var rematch_confirm_button: Button
+var online_game_finished := false
+var rematch_requested := false
+var opponent_left_after_game := false
 var online_overlay: Control
 var online_choice_view: Control
 var online_join_view: Control
@@ -559,7 +565,7 @@ func _build_online_overlay() -> void:
 func _build_settings_overlay() -> void:
 	settings_overlay = Control.new()
 	settings_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	settings_overlay.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
+	settings_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
 	settings_overlay.visible = false
 	ui_root.add_child(settings_overlay)
 	var shade := ColorRect.new()
@@ -631,23 +637,44 @@ func _build_win_overlay() -> void:
 	win_overlay.add_child(shade)
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-300, -205)
-	panel.size = Vector2(600, 410)
+	panel.position = Vector2(-300, -240)
+	panel.size = Vector2(600, 480)
 	win_overlay.add_child(panel)
 	win_title = _make_label("你赢了", 48, INK, HORIZONTAL_ALIGNMENT_CENTER)
-	win_title.position = Vector2(75, 78)
+	win_title.position = Vector2(75, 52)
 	win_title.size = Vector2(450, 72)
 	panel.add_child(win_title)
+	rematch_status_label = _make_label("", 21, Color("8e2d22"), HORIZONTAL_ALIGNMENT_CENTER)
+	rematch_status_label.position = Vector2(70, 128)
+	rematch_status_label.size = Vector2(460, 48)
+	rematch_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	panel.add_child(rematch_status_label)
 	rematch_button = Button.new()
 	rematch_button.text = "再来一局"
-	rematch_button.position = Vector2(150, 192)
+	rematch_button.position = Vector2(150, 190)
 	rematch_button.size = Vector2(300, 62)
 	_style_button(rematch_button, 26)
 	rematch_button.pressed.connect(_on_rematch_pressed)
 	panel.add_child(rematch_button)
+	rematch_target_option = OptionButton.new()
+	for score in [1500, 2500, 4000, 6000]:
+		rematch_target_option.add_item(str(score), score)
+	rematch_target_option.position = Vector2(150, 182)
+	rematch_target_option.size = Vector2(300, 56)
+	_style_button(rematch_target_option, 24)
+	rematch_target_option.visible = false
+	panel.add_child(rematch_target_option)
+	rematch_confirm_button = Button.new()
+	rematch_confirm_button.text = "确认目标并开始"
+	rematch_confirm_button.position = Vector2(150, 255)
+	rematch_confirm_button.size = Vector2(300, 58)
+	_style_button(rematch_confirm_button, 24)
+	rematch_confirm_button.pressed.connect(_confirm_rematch_target)
+	rematch_confirm_button.visible = false
+	panel.add_child(rematch_confirm_button)
 	var menu := Button.new()
 	menu.text = "返回菜单"
-	menu.position = Vector2(150, 274)
+	menu.position = Vector2(150, 350)
 	menu.size = Vector2(300, 54)
 	_style_button(menu, 22)
 	menu.pressed.connect(_show_menu)
@@ -684,6 +711,9 @@ func _bind_network_client() -> void:
 	network_client.disconnected.connect(_on_network_disconnected)
 	network_client.room_assigned.connect(_on_network_room_assigned)
 	network_client.room_ready.connect(_on_network_room_ready)
+	network_client.rematch_waiting.connect(_on_network_rematch_waiting)
+	network_client.rematch_choose_target.connect(_on_network_rematch_choose_target)
+	network_client.rematch_started.connect(_on_network_rematch_started)
 	network_client.snapshot_received.connect(_on_network_snapshot)
 	network_client.rolled.connect(_on_rolled)
 	network_client.busted.connect(_on_busted)
@@ -779,8 +809,17 @@ func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 		_set_online_status("已加入房间 %s，正在开始…" % room_code)
 
 func _on_network_room_ready(snapshot: GameSnapshot) -> void:
+	_start_network_game(snapshot)
+
+func _on_network_rematch_started(snapshot: GameSnapshot) -> void:
+	_start_network_game(snapshot)
+
+func _start_network_game(snapshot: GameSnapshot) -> void:
 	get_tree().paused = false
 	local_mode = false
+	online_game_finished = false
+	rematch_requested = false
+	opponent_left_after_game = false
 	game_generation += 1
 	_clear_all_dice()
 	menu_screen.visible = false
@@ -789,6 +828,13 @@ func _on_network_room_ready(snapshot: GameSnapshot) -> void:
 	win_overlay.visible = false
 	rules_overlay.visible = false
 	settings_overlay.visible = false
+	rematch_status_label.text = ""
+	rematch_target_option.visible = false
+	rematch_target_option.disabled = false
+	rematch_confirm_button.visible = false
+	rematch_confirm_button.disabled = false
+	rematch_button.visible = true
+	rematch_button.disabled = false
 	session = NetworkProxy.new()
 	session.apply_snapshot(snapshot)
 	latest_snapshot = snapshot
@@ -797,6 +843,40 @@ func _on_network_room_ready(snapshot: GameSnapshot) -> void:
 	input_locked = true
 	_on_state_changed(snapshot)
 	status_label.text = "你先手，等待服务器掷骰" if snapshot.current_player == local_player_index else "对手先手，等待服务器掷骰"
+
+func _on_network_rematch_waiting() -> void:
+	rematch_requested = true
+	rematch_button.disabled = true
+	rematch_status_label.text = "等待对方加入中…"
+
+func _on_network_rematch_choose_target() -> void:
+	rematch_requested = true
+	rematch_button.visible = false
+	if local_player_index == 0:
+		_select_option_by_id(rematch_target_option, latest_snapshot.target_score)
+		rematch_target_option.visible = true
+		rematch_target_option.disabled = false
+		rematch_confirm_button.visible = true
+		rematch_confirm_button.disabled = false
+		rematch_status_label.text = "请选择新一局目标分数"
+	else:
+		rematch_status_label.text = "等待房主选择目标分数…"
+
+func _confirm_rematch_target() -> void:
+	if opponent_left_after_game:
+		rematch_status_label.text = "对方已退出"
+		rematch_confirm_button.disabled = true
+		return
+	rematch_target_option.disabled = true
+	rematch_confirm_button.disabled = true
+	rematch_status_label.text = "正在开始新一局…"
+	network_client.confirm_rematch(rematch_target_option.get_item_id(rematch_target_option.selected))
+
+func _select_option_by_id(option: OptionButton, item_id: int) -> void:
+	for index in range(option.item_count):
+		if option.get_item_id(index) == item_id:
+			option.select(index)
+			return
 
 func _on_network_snapshot(snapshot: GameSnapshot) -> void:
 	if local_mode or session == null:
@@ -812,6 +892,12 @@ func _on_network_disconnected() -> void:
 		create_room_button.disabled = false
 		join_room_button.disabled = false
 		_set_online_status("与服务器的连接已断开")
+	elif not local_mode and online_game_finished:
+		rematch_requested = true
+		rematch_button.disabled = true
+		rematch_confirm_button.disabled = true
+		rematch_target_option.disabled = true
+		rematch_status_label.text = "与服务器的连接已断开"
 	elif not local_mode and game_hud.visible:
 		_show_online_disconnect("与服务器的连接已断开")
 
@@ -820,18 +906,31 @@ func _on_network_error(message: String) -> void:
 		create_room_button.disabled = false
 		join_room_button.disabled = false
 		_set_online_status(message)
+	elif win_overlay.visible:
+		rematch_status_label.text = message
 	else:
 		status_label.text = message
 		input_locked = false
 		_update_buttons()
 
 func _on_opponent_left() -> void:
+	if not local_mode and online_game_finished:
+		opponent_left_after_game = true
+		if rematch_requested:
+			rematch_button.disabled = true
+			rematch_confirm_button.disabled = true
+			rematch_target_option.disabled = true
+			rematch_status_label.text = "对方已退出"
+		return
 	_show_online_disconnect("对手已离开房间")
 
 func _show_online_disconnect(message: String) -> void:
 	game_generation += 1
 	input_locked = true
 	session = null
+	online_game_finished = false
+	rematch_requested = false
+	opponent_left_after_game = false
 	latest_snapshot = null
 	_clear_all_dice()
 	game_hud.visible = false
@@ -847,6 +946,9 @@ func _show_menu() -> void:
 	session = null
 	local_mode = true
 	local_player_index = 0
+	online_game_finished = false
+	rematch_requested = false
+	opponent_left_after_game = false
 	if network_client != null:
 		network_client.disconnect_from_server()
 	latest_snapshot = null
@@ -860,13 +962,14 @@ func _show_menu() -> void:
 		online_overlay.visible = false
 
 func _open_settings() -> void:
-	settings_notice.text = "当前对局已暂停，背景音乐将继续播放"
+	settings_notice.text = "当前对局已暂停，背景音乐将继续播放" if local_mode else "联机对局不会暂停"
 	settings_return_button.text = "返回游戏"
 	settings_return_button.position = Vector2(90, 393)
 	settings_return_button.size = Vector2(235, 58)
 	settings_menu_button.visible = true
 	settings_overlay.visible = true
-	get_tree().paused = true
+	if local_mode:
+		get_tree().paused = true
 
 func _open_menu_settings() -> void:
 	settings_notice.text = "背景音乐将继续播放"
@@ -1010,15 +1113,34 @@ func _on_game_finished(winner_index: int) -> void:
 	input_locked = true
 	status_label.text = "对局结束"
 	win_title.text = "你赢了！" if winner_index == local_player_index else ("电脑获胜" if local_mode else "对手获胜")
-	rematch_button.text = "再来一局" if local_mode else "返回联机大厅"
+	online_game_finished = not local_mode
+	rematch_requested = false
+	opponent_left_after_game = false
+	rematch_button.text = "再来一局"
+	rematch_button.visible = true
+	rematch_button.disabled = false
+	rematch_status_label.text = ""
+	rematch_target_option.visible = false
+	rematch_target_option.disabled = false
+	rematch_confirm_button.visible = false
+	rematch_confirm_button.disabled = false
+	if not local_mode and settings_overlay.visible:
+		settings_overlay.visible = false
+		get_tree().paused = false
 	_show_win_after_delay(game_generation)
 
 func _on_rematch_pressed() -> void:
 	if local_mode:
 		_start_selected_game()
-	else:
-		_show_menu()
-		_open_online_lobby()
+		return
+	if opponent_left_after_game:
+		rematch_button.disabled = true
+		rematch_status_label.text = "对方已退出"
+		return
+	rematch_requested = true
+	rematch_button.disabled = true
+	rematch_status_label.text = "等待对方加入中…"
+	network_client.request_rematch()
 
 func _show_win_after_delay(generation: int) -> void:
 	await get_tree().create_timer(0.7).timeout
