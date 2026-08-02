@@ -10,7 +10,7 @@
 
 默认目标为 4000 分，主菜单也可选择 1500、2500 或 6000 分。
 
-主界面右上角提供“检查更新”。点击后会从 GitHub Release 检查最新版并自动下载当前平台安装包：Android 会打开系统安装确认界面，Windows 会退出游戏、替换程序并自动重新启动。
+主界面右上角提供“检查更新”。点击后会优先通过国内 ECS 更新源检查并下载最新版，国内源不可用时自动回退 GitHub：Android 会打开系统安装确认界面，Windows 会退出游戏、替换程序并自动重新启动。
 
 ## 联机对战
 
@@ -75,7 +75,7 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 
 ## Android 导出
 
-工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.1.4`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64，并已启用联网与请求系统安装 APK 的权限。
+工程已配置 Android Gradle 导出，包名为 `com.local.medievaldice`，版本为 `1.1.6`，最低 Android 版本为 7.0（API 24），目标 API 为 35，仅打包 ARM64，并已启用联网与请求系统安装 APK 的权限。
 
 本机工具链位于被 Git 忽略的 `.tools` 目录，包含 JDK 17、Android SDK Platform/Build Tools 35、NDK 28.1 与 CMake 3.10.2。换机后应在 Godot 的“编辑器设置 → 导出 → Android”中重新填写 JDK 和 Android SDK 路径。
 

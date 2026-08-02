@@ -3,7 +3,7 @@
     package="com.local.medievaldice.update">
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <application>
+    <application android:usesCleartextTraffic="true">
         <meta-data
             android:name="org.godotengine.plugin.v2.UpdateInstaller"
             android:value="com.local.medievaldice.update.UpdateInstallerPlugin" />

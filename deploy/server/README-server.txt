@@ -1,9 +1,10 @@
-中世纪骰局 Linux x86_64 联机服务器
+中世纪骰局 Linux x86_64 联机与更新服务器
 
-1. 将 medieval_dice_server.x86_64 上传到 /opt/medieval-dice/。
-2. 执行 chmod +x /opt/medieval-dice/medieval_dice_server.x86_64。
-3. 前台测试：./medieval_dice_server.x86_64 -- --port=9080
-4. 正式运行可参考 medieval-dice.service。
-5. 正式客户端建议通过 Caddyfile 示例提供 wss:// 地址。
+1. Godot 联机服务器监听本机 9081。
+2. Nginx 对外监听已有安全组端口 9080。
+3. 根路径 WebSocket 代理到 127.0.0.1:9081，保持旧客户端联机地址不变。
+4. /updates/ 从 /var/www/medieval-dice-updates/ 提供版本信息和安装包。
+5. 更新 latest.json 时应最后上传，确保客户端不会看到尚未上传完整的安装包。
 
-服务器使用 TCP 9080。Caddy 对外提供 80/443 时，只需让游戏服务器监听本机 9080。
+客户端默认联机地址：ws://121.196.201.193:9080
+客户端国内更新地址：http://121.196.201.193:9080/updates/latest.json

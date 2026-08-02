@@ -4,7 +4,8 @@ extends Node
 signal status_changed(message: String)
 signal busy_changed(busy: bool)
 
-const LATEST_RELEASE_API := "https://api.github.com/repos/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/latest"
+const PRIMARY_RELEASE_API := "http://121.196.201.193:9080/updates/latest.json"
+const GITHUB_RELEASE_API := "https://api.github.com/repos/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/latest"
 const ANDROID_ASSET := "medieval_dice-debug.apk"
 const WINDOWS_ASSET := "medieval_dice-windows-x86_64.zip"
 
@@ -12,10 +13,13 @@ var current_version := str(ProjectSettings.get_setting("application/config/versi
 var latest_version := ""
 var latest_release_url := ""
 var download_url := ""
+var fallback_download_url := ""
 var download_path := ""
 var check_request: HTTPRequest
 var download_request: HTTPRequest
 var busy := false
+var checking_github := false
+var downloading_from_github := false
 
 
 func _ready() -> void:
@@ -43,20 +47,39 @@ func check_and_install() -> void:
 	if busy:
 		return
 	_set_busy(true)
+	checking_github = false
+	downloading_from_github = false
 	status_changed.emit("正在检查更新…")
+	_request_release(PRIMARY_RELEASE_API)
+
+
+func _request_release(url: String) -> void:
 	var headers := PackedStringArray([
-		"Accept: application/vnd.github+json",
-		"X-GitHub-Api-Version: 2022-11-28",
 		"User-Agent: MedievalDiceUpdater/%s" % current_version,
 	])
-	var error := check_request.request(LATEST_RELEASE_API, headers)
+	if checking_github:
+		headers.append("Accept: application/vnd.github+json")
+		headers.append("X-GitHub-Api-Version: 2022-11-28")
+	var error := check_request.request(url, headers)
 	if error != OK:
-		_fail("无法开始检查更新：%s" % error_string(error))
+		if not checking_github:
+			_start_github_check()
+		else:
+			_fail("无法开始检查更新：%s" % error_string(error))
+
+
+func _start_github_check() -> void:
+	checking_github = true
+	status_changed.emit("国内更新源不可用，正在尝试 GitHub…")
+	_request_release(GITHUB_RELEASE_API)
 
 
 func _on_check_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		_fail("检查更新失败，请确认网络连接")
+		if not checking_github:
+			_start_github_check()
+		else:
+			_fail("检查更新失败，请确认网络连接")
 		return
 	var parsed = JSON.parse_string(body.get_string_from_utf8())
 	if not parsed is Dictionary:
@@ -72,6 +95,7 @@ func _on_check_completed(result: int, response_code: int, _headers: PackedString
 		_set_busy(false)
 		return
 	download_url = get_asset_url(parsed, OS.get_name())
+	fallback_download_url = get_asset_fallback_url(parsed, OS.get_name())
 	if download_url.is_empty():
 		_fail("最新版没有当前平台的安装包")
 		return
@@ -88,15 +112,29 @@ func _start_download() -> void:
 	download_request.download_file = download_path
 	set_process(true)
 	status_changed.emit("正在下载 v%s：0%%" % latest_version)
-	error = download_request.request(download_url, PackedStringArray(["User-Agent: MedievalDiceUpdater/%s" % current_version]))
+	error = _request_download()
 	if error != OK:
 		set_process(false)
 		_fail("无法开始下载安装包：%s" % error_string(error))
 
 
+func _request_download() -> Error:
+	return download_request.request(download_url, PackedStringArray(["User-Agent: MedievalDiceUpdater/%s" % current_version]))
+
+
 func _on_download_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	set_process(false)
 	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		if not downloading_from_github and not fallback_download_url.is_empty():
+			downloading_from_github = true
+			download_url = fallback_download_url
+			status_changed.emit("国内下载失败，正在尝试 GitHub…")
+			set_process(true)
+			var error := _request_download()
+			if error != OK:
+				set_process(false)
+				_fail("无法开始 GitHub 下载：%s" % error_string(error))
+			return
 		_fail("更新包下载失败")
 		return
 	if OS.get_name() == "Android":
@@ -187,6 +225,14 @@ static func get_asset_url(release: Dictionary, platform_name: String) -> String:
 	for asset in release.get("assets", []):
 		if asset is Dictionary and str(asset.get("name", "")) == expected_name:
 			return str(asset.get("browser_download_url", ""))
+	return ""
+
+
+static func get_asset_fallback_url(release: Dictionary, platform_name: String) -> String:
+	var expected_name := ANDROID_ASSET if platform_name == "Android" else WINDOWS_ASSET if platform_name == "Windows" else ""
+	for asset in release.get("assets", []):
+		if asset is Dictionary and str(asset.get("name", "")) == expected_name:
+			return str(asset.get("fallback_download_url", ""))
 	return ""
 
 
