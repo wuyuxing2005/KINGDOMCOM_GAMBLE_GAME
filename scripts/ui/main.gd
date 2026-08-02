@@ -68,7 +68,8 @@ var room_code_edit: LineEdit
 var online_target_option: OptionButton
 var create_room_button: Button
 var join_room_button: Button
-var created_room_code_label: Label
+var created_room_code_button: Button
+var created_room_code := ""
 var online_status_label: Label
 var pending_online_request := ""
 var settings_overlay: Control
@@ -533,10 +534,13 @@ func _build_online_overlay() -> void:
 	_style_button(create_room_button, 24)
 	create_room_button.pressed.connect(func() -> void: _begin_online_request("create"))
 	online_create_view.add_child(create_room_button)
-	created_room_code_label = _make_label("", 30, Color("8e2d22"), HORIZONTAL_ALIGNMENT_CENTER)
-	created_room_code_label.position = Vector2(0, 218)
-	created_room_code_label.size = Vector2(500, 50)
-	online_create_view.add_child(created_room_code_label)
+	created_room_code_button = Button.new()
+	created_room_code_button.position = Vector2(45, 218)
+	created_room_code_button.size = Vector2(410, 58)
+	_style_button(created_room_code_button, 24)
+	created_room_code_button.pressed.connect(_copy_created_room_code)
+	created_room_code_button.visible = false
+	online_create_view.add_child(created_room_code_button)
 	var create_back := Button.new()
 	create_back.text = "返回上一步"
 	create_back.position = Vector2(100, 294)
@@ -700,7 +704,8 @@ func _show_online_choice() -> void:
 	online_join_view.visible = false
 	online_create_view.visible = false
 	room_code_edit.clear()
-	created_room_code_label.visible = false
+	created_room_code = ""
+	created_room_code_button.visible = false
 	online_target_option.disabled = false
 	create_room_button.disabled = false
 	join_room_button.disabled = false
@@ -719,7 +724,8 @@ func _show_online_create() -> void:
 	online_choice_view.visible = false
 	online_join_view.visible = false
 	online_create_view.visible = true
-	created_room_code_label.visible = false
+	created_room_code = ""
+	created_room_code_button.visible = false
 	online_target_option.disabled = false
 	create_room_button.disabled = false
 	_set_online_status("")
@@ -727,6 +733,10 @@ func _show_online_create() -> void:
 func _set_online_status(message: String) -> void:
 	online_status_label.text = message
 	online_status_label.visible = not message.is_empty()
+
+func _copy_created_room_code() -> void:
+	DisplayServer.clipboard_set(created_room_code)
+	_set_online_status("房间码已复制，正在等待另一位玩家加入…")
 
 func _close_online_lobby() -> void:
 	pending_online_request = ""
@@ -759,8 +769,9 @@ func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 	pending_online_request = ""
 	local_player_index = player_index
 	if player_index == 0:
-		created_room_code_label.text = "房间码：%s" % room_code
-		created_room_code_label.visible = true
+		created_room_code = room_code
+		created_room_code_button.text = "房间码：%s　点击复制" % room_code
+		created_room_code_button.visible = true
 		online_target_option.disabled = true
 		create_room_button.disabled = true
 		_set_online_status("请把房间码发给另一位玩家，正在等待加入…")
@@ -785,7 +796,7 @@ func _on_network_room_ready(snapshot: GameSnapshot) -> void:
 	opponent_title_label.text = "对手"
 	input_locked = true
 	_on_state_changed(snapshot)
-	status_label.text = "对局开始，等待服务器掷骰"
+	status_label.text = "你先手，等待服务器掷骰" if snapshot.current_player == local_player_index else "对手先手，等待服务器掷骰"
 
 func _on_network_snapshot(snapshot: GameSnapshot) -> void:
 	if local_mode or session == null:
@@ -965,7 +976,7 @@ func _on_die_roll_finished(_index: int) -> void:
 
 func _resolve_bust_after_delay(generation: int) -> void:
 	status_label.text = "爆骰！本轮得分清零"
-	await get_tree().create_timer(1.15).timeout
+	await get_tree().create_timer(2.0).timeout
 	if generation != game_generation or session == null:
 		return
 	session.resolve_bust()

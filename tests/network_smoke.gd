@@ -11,6 +11,8 @@ var ready_count := 0
 var host_snapshot: GameSnapshot
 var guest_snapshot: GameSnapshot
 var failures := 0
+var expected_starting_player := -1
+var actual_starting_player := -1
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -27,6 +29,12 @@ func _run() -> void:
 			_fail("服务器未能监听测试端口")
 			_finish(server)
 			return
+		server.rng.seed = 12345
+		var expected_rng := RandomNumberGenerator.new()
+		expected_rng.seed = 12345
+		for index in range(6):
+			expected_rng.randi_range(0, 31)
+		expected_starting_player = expected_rng.randi_range(0, 1)
 	host = Client.new()
 	guest = Client.new()
 	root.add_child(host)
@@ -63,6 +71,9 @@ func _run() -> void:
 		return
 	if host_snapshot.target_score != 1500 or guest_snapshot.target_score != 1500:
 		_fail("房主选择的目标分数未同步到双方")
+	if expected_starting_player >= 0 and host_snapshot.current_player != expected_starting_player:
+		_fail("服务器未按随机结果设置先手玩家")
+	actual_starting_player = host_snapshot.current_player
 	if host_snapshot.current_roll != guest_snapshot.current_roll:
 		_fail("双端骰子点数不一致")
 	var subsets := ScoringRules.get_scoring_subsets(host_snapshot.current_roll)
@@ -81,7 +92,7 @@ func _run() -> void:
 	if not await _wait_until(func() -> bool: return host_snapshot.scores[0] + host_snapshot.scores[1] > 0 and host_snapshot.scores == guest_snapshot.scores):
 		_fail("停手得分未在双端同步")
 	else:
-		print("PASS: 房间创建、加入、权威掷骰、选择和结算已通过双客户端测试")
+		print("PASS: 房间创建、加入、随机先手、权威掷骰、选择和结算已通过双客户端测试（先手玩家 %d）" % actual_starting_player)
 	_finish(server)
 
 func _wait_until(predicate: Callable, seconds: float = 5.0) -> bool:

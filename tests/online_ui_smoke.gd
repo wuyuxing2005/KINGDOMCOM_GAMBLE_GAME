@@ -27,6 +27,11 @@ func _run() -> void:
 	if not await _capture("res://build/online-created-smoke.png"):
 		quit(1)
 		return
+	current_scene._copy_created_room_code()
+	if DisplayServer.clipboard_get() != "ABC123":
+		printerr("room code clipboard copy failed")
+		quit(1)
+		return
 	print("online lobby smoke captures saved")
 	quit(0)
 
