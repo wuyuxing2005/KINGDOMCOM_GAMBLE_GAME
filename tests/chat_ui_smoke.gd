@@ -57,13 +57,22 @@ func _run() -> void:
 	var long_size: Vector2 = scene.local_chat_bubble.size
 	if long_size.x <= short_size.x or long_size.x > 308.1 or long_size.y <= short_size.y:
 		_fail("长文字气泡未按内容扩展或超过最大宽度")
+	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "好", "")
+	if scene.local_chat_bubble.size.x >= long_size.x or scene.local_chat_bubble.size.y >= long_size.y:
+		_fail("长文字切换为短文字后气泡没有随字体内容缩小")
+	scene._on_chat_received(0, Protocol.CHAT_KIND_STICKER, "", "heart_eyes")
+	if scene.local_chat_bubble.size != Vector2(120, 120):
+		_fail("本地表情气泡尺寸错误")
+	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "你好", "")
+	if scene.local_chat_bubble.size.x >= 120.0 or scene.local_chat_bubble.size.y >= 120.0:
+		_fail("表情切换为短文字后仍保留表情气泡尺寸")
 	scene._on_chat_received(1, Protocol.CHAT_KIND_STICKER, "", "crying")
 	if scene.chat_preview_button.text != "对手：" or scene.chat_preview_button.icon == null:
 		_fail("对手表情未显示在缩略聊天框")
 	if scene.opponent_chat_bubble.size != Vector2(120, 120) or not scene.opponent_chat_sticker.visible:
 		_fail("表情未使用贴合图片的120×120白色气泡")
-	if scene.chat_history.size() != 3 or scene.chat_history_list.get_child_count() != 4:
-		_fail("完整历史未按接收顺序保留三条消息")
+	if scene.chat_history.size() != 6 or scene.chat_history_list.get_child_count() != 7:
+		_fail("完整历史未按接收顺序保留六条消息")
 	if not scene.local_chat_bubble.visible or not scene.opponent_chat_bubble.visible:
 		_fail("双方即时气泡不能同时显示")
 	if scene.local_chat_timer.time_left < 5.8 or scene.opponent_chat_timer.time_left < 5.8:

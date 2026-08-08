@@ -311,7 +311,7 @@ func _build_menu() -> void:
 	_style_button(update_button, 21)
 	update_button.pressed.connect(_check_for_update)
 	menu_screen.add_child(update_button)
-	var display_version := "1.1.6-chat-test.2" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	var display_version := "1.1.6-chat-test.3" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 	update_status_label = _make_label("v%s" % display_version, 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
 	update_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	update_status_label.position = Vector2(-280, 78)
@@ -1645,6 +1645,7 @@ func _append_chat_history_row(message: Dictionary) -> void:
 	_scroll_chat_to_bottom.call_deferred()
 
 func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: TextureRect, kind: String, text: String, sticker_id: String) -> void:
+	bubble.custom_minimum_size = Vector2.ZERO
 	if kind == Protocol.CHAT_KIND_STICKER:
 		bubble.size = Vector2(120, 120)
 		bubble.custom_minimum_size = bubble.size
