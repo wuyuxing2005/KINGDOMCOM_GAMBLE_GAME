@@ -24,7 +24,7 @@ const ERROR := "error"
 
 const CHAT_KIND_TEXT := "text"
 const CHAT_KIND_STICKER := "sticker"
-const CHAT_STICKER_IDS := ["smile", "heart_eyes", "crying", "side_eye", "black_grin", "excited"]
+const CHAT_STICKER_IDS := ["smile", "heart_eyes", "crying", "side_eye", "black_grin", "excited", "angry_teeth"]
 
 static func action_to_dictionary(action: GameAction) -> Dictionary:
 	return {

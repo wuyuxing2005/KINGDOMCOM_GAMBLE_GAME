@@ -1,6 +1,6 @@
 extends SceneTree
 
-const STICKERS := ["smile", "heart_eyes", "crying", "side_eye", "black_grin", "excited"]
+const STICKERS := ["smile", "heart_eyes", "crying", "side_eye", "black_grin", "excited", "angry_teeth"]
 
 func _initialize() -> void:
 	var failures := 0
@@ -23,5 +23,5 @@ func _initialize() -> void:
 			printerr("FAIL: 表情主体尺寸不统一：%s %s" % [sticker_id, used_rect])
 			failures += 1
 	if failures == 0:
-		print("PASS: 六张表情的透明背景、256画布和统一主体尺寸测试通过")
+		print("PASS: 七张表情的透明背景、256画布和统一主体尺寸测试通过")
 	quit(1 if failures > 0 else 0)
