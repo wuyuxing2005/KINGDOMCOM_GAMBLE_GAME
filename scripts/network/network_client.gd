@@ -2,6 +2,7 @@ class_name NetworkClient
 extends Node
 
 const DEFAULT_SERVER_URL := "ws://121.196.201.193:9080"
+const TEST_SERVER_URL := "ws://121.196.201.193:9080/test-ws"
 
 signal connected
 signal disconnected
@@ -14,6 +15,7 @@ signal snapshot_received(snapshot: GameSnapshot)
 signal rolled(values: Array[int])
 signal busted(player_index: int)
 signal hot_dice(player_index: int)
+signal chat_received(player_index: int, kind: String, text: String, sticker_id: String)
 signal game_finished(winner_index: int)
 signal opponent_left
 signal server_error(message: String)
@@ -22,6 +24,9 @@ const Protocol = preload("res://scripts/network/network_protocol.gd")
 
 var peer: WebSocketMultiplayerPeer
 var is_connected := false
+
+static func get_default_server_url() -> String:
+	return TEST_SERVER_URL if OS.has_feature("chat_test") else DEFAULT_SERVER_URL
 
 func connect_to_server(url: String) -> Error:
 	disconnect_from_server()
@@ -54,6 +59,12 @@ func request_rematch() -> void:
 
 func confirm_rematch(target_score: int) -> void:
 	_send({"type": Protocol.REMATCH_CONFIRM, "target_score": target_score})
+
+func send_chat_text(message: String) -> void:
+	_send({"type": Protocol.CHAT_SEND, "kind": Protocol.CHAT_KIND_TEXT, "text": message})
+
+func send_chat_sticker(sticker_id: String) -> void:
+	_send({"type": Protocol.CHAT_SEND, "kind": Protocol.CHAT_KIND_STICKER, "sticker_id": sticker_id})
 
 func _process(_delta: float) -> void:
 	if peer == null:
@@ -92,6 +103,13 @@ func _handle_message(message: Dictionary) -> void:
 			busted.emit(int(message.get("player_index", -1)))
 		Protocol.HOT_DICE:
 			hot_dice.emit(int(message.get("player_index", -1)))
+		Protocol.CHAT_MESSAGE:
+			chat_received.emit(
+				int(message.get("player_index", -1)),
+				String(message.get("kind", "")),
+				String(message.get("text", "")),
+				String(message.get("sticker_id", ""))
+			)
 		Protocol.GAME_FINISHED:
 			game_finished.emit(int(message.get("winner_index", -1)))
 		Protocol.OPPONENT_LEFT:

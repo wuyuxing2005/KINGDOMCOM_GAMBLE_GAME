@@ -47,6 +47,8 @@ func _handle_message(sender: int, message: Dictionary) -> void:
 			_join_room(sender, String(message.get("room_code", "")).strip_edges().to_upper())
 		Protocol.ACTION:
 			_handle_action(sender, message.get("action", {}))
+		Protocol.CHAT_SEND:
+			_handle_chat(sender, message)
 		Protocol.REMATCH_REQUEST:
 			_handle_rematch_request(sender)
 		Protocol.REMATCH_CONFIRM:
@@ -112,6 +114,49 @@ func _handle_action(sender: int, action_data: Dictionary) -> void:
 		return
 	if action.type == GameAction.Type.BANK and session.phase != GameSession.Phase.GAME_OVER:
 		_roll_room_after_delay(code, session, 0.65)
+
+func _handle_chat(sender: int, message: Dictionary) -> void:
+	if not peer_rooms.has(sender):
+		_send_error(sender, "你不在对局房间中")
+		return
+	var code: String = peer_rooms[sender]
+	if not rooms.has(code):
+		_send_error(sender, "房间已关闭")
+		return
+	var room: Dictionary = rooms[code]
+	var players: Array = room["players"]
+	var player_index := players.find(sender)
+	if players.size() != 2 or player_index < 0:
+		_send_error(sender, "对手尚未加入")
+		return
+	var session: GameSession = room["session"]
+	if session.phase == GameSession.Phase.GAME_OVER:
+		_send_error(sender, "对局已经结束")
+		return
+	var kind := String(message.get("kind", ""))
+	var outgoing := {
+		"type": Protocol.CHAT_MESSAGE,
+		"player_index": player_index,
+		"kind": kind,
+		"text": "",
+		"sticker_id": "",
+	}
+	if kind == Protocol.CHAT_KIND_TEXT:
+		var text := String(message.get("text", "")).strip_edges()
+		if text.is_empty() or text.length() > 40:
+			_send_error(sender, "聊天文字必须为1至40个字符")
+			return
+		outgoing["text"] = text
+	elif kind == Protocol.CHAT_KIND_STICKER:
+		var sticker_id := String(message.get("sticker_id", ""))
+		if not sticker_id in Protocol.CHAT_STICKER_IDS:
+			_send_error(sender, "表情不存在")
+			return
+		outgoing["sticker_id"] = sticker_id
+	else:
+		_send_error(sender, "聊天消息类型无效")
+		return
+	_broadcast(code, outgoing)
 
 func _handle_rematch_request(sender: int) -> void:
 	if not peer_rooms.has(sender):

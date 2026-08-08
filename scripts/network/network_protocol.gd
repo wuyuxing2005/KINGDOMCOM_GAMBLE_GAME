@@ -4,6 +4,7 @@ extends RefCounted
 const CREATE_ROOM := "create_room"
 const JOIN_ROOM := "join_room"
 const ACTION := "action"
+const CHAT_SEND := "chat_send"
 const REMATCH_REQUEST := "rematch_request"
 const REMATCH_CONFIRM := "rematch_confirm"
 const ROOM_CREATED := "room_created"
@@ -16,9 +17,14 @@ const SNAPSHOT := "snapshot"
 const ROLLED := "rolled"
 const BUSTED := "busted"
 const HOT_DICE := "hot_dice"
+const CHAT_MESSAGE := "chat_message"
 const GAME_FINISHED := "game_finished"
 const OPPONENT_LEFT := "opponent_left"
 const ERROR := "error"
+
+const CHAT_KIND_TEXT := "text"
+const CHAT_KIND_STICKER := "sticker"
+const CHAT_STICKER_IDS := ["smile", "heart_eyes", "crying", "side_eye", "black_grin", "excited"]
 
 static func action_to_dictionary(action: GameAction) -> Dictionary:
 	return {

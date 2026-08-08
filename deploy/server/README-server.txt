@@ -6,5 +6,11 @@
 4. /updates/ 从 /var/www/medieval-dice-updates/ 提供版本信息和安装包。
 5. 更新 latest.json 时应最后上传，确保客户端不会看到尚未上传完整的安装包。
 
+聊天测试版：
+1. 独立测试服务监听本机 9082，由 medieval-dice-chat-test.service 管理。
+2. Nginx 的 /test-ws WebSocket 路径代理到 127.0.0.1:9082。
+3. 测试安装包放在 /var/www/medieval-dice-updates/test/，不要修改正式 latest.json。
+
 客户端默认联机地址：ws://121.196.201.193:9080
 客户端国内更新地址：http://121.196.201.193:9080/updates/latest.json
+聊天测试客户端地址：ws://121.196.201.193:9080/test-ws
