@@ -41,6 +41,7 @@ func _run() -> void:
 	if scene._can_human_act():
 		_fail("历史抽屉打开时仍可操作骰子")
 	await process_frame
+	var empty_input_width: float = scene.chat_input.size.x
 	_capture("res://build/chat-history-drawer-smoke.png")
 	scene.chat_input.text = "短"
 	scene._on_chat_input_changed()
@@ -48,9 +49,13 @@ func _run() -> void:
 	scene.chat_input.text = "测".repeat(40)
 	scene._on_chat_input_changed()
 	var full_input_size: Vector2 = scene.chat_input.size
-	if scene.chat_input.text.length() != 40 or full_input_size.x <= short_input_size.x or full_input_size.y <= short_input_size.y:
-		_fail("输入框没有随40字内容先扩宽再增高")
+	if scene.chat_input.text.length() != 40 or not is_equal_approx(empty_input_width, 300.0):
+		_fail("输入框没有从空状态开始保持满宽")
+	if not is_equal_approx(short_input_size.x, empty_input_width) or not is_equal_approx(full_input_size.x, empty_input_width) or full_input_size.y <= short_input_size.y:
+		_fail("输入框宽度发生变化或高度没有随40字内容增加")
 	await process_frame
+	if scene.chat_input.get_v_scroll_bar().visible:
+		_fail("输入框仍显示上下滚动条")
 	_capture("res://build/chat-input-40-smoke.png")
 	scene.chat_input.text = "字".repeat(45)
 	scene._on_chat_input_changed()
@@ -109,6 +114,16 @@ func _run() -> void:
 	if scene.local_chat_timer.time_left < 5.8 or scene.opponent_chat_timer.time_left < 5.8:
 		_fail("即时消息没有使用6秒独立计时")
 	await process_frame
+	var history_right: float = scene.chat_history_scroll.global_position.x + scene.chat_history_scroll.size.x
+	var history_scrollbar: VScrollBar = scene.chat_history_scroll.get_v_scroll_bar()
+	if history_scrollbar.visible:
+		history_right = history_scrollbar.global_position.x
+	for row in scene.chat_history_list.get_children():
+		if row == scene.chat_empty_label:
+			continue
+		for child in row.get_children():
+			if child is Panel and child.global_position.x + child.size.x + 6.0 > history_right:
+				_fail("历史气泡圆角或阴影仍被右侧滚动条裁剪")
 	_capture("res://build/chat-history-messages-smoke.png")
 
 	scene._close_chat()
@@ -133,7 +148,7 @@ func _run() -> void:
 	if scene.chat_entry.visible:
 		_fail("单人模式错误显示聊天入口")
 	if failures == 0:
-		print("PASS: 表情顺序、40字输入、动态输入尺寸、动态白色气泡和当前局清理测试通过")
+		print("PASS: 满宽输入框、无内部滚动条、历史气泡安全边距和40字聊天测试通过")
 	quit(1 if failures > 0 else 0)
 
 func _make_snapshot() -> GameSnapshot:

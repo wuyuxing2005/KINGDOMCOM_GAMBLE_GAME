@@ -78,6 +78,7 @@ var chat_input: TextEdit
 var chat_send_button: Button
 var chat_input_adjusting := false
 var chat_history_scroll: ScrollContainer
+var chat_history_margin: MarginContainer
 var chat_history_list: VBoxContainer
 var chat_empty_label: Label
 var local_chat_bubble: Panel
@@ -315,7 +316,7 @@ func _build_menu() -> void:
 	_style_button(update_button, 21)
 	update_button.pressed.connect(_check_for_update)
 	menu_screen.add_child(update_button)
-	var display_version := "1.1.6-chat-test.4" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	var display_version := "1.1.6-chat-test.5" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 	update_status_label = _make_label("v%s" % display_version, 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
 	update_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	update_status_label.position = Vector2(-280, 78)
@@ -617,17 +618,25 @@ func _build_chat_overlay() -> void:
 	chat_history_scroll.offset_bottom = -92.0
 	chat_history_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	drawer.add_child(chat_history_scroll)
+	chat_history_margin = MarginContainer.new()
+	chat_history_margin.custom_minimum_size.x = 400.0
+	chat_history_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_history_margin.add_theme_constant_override("margin_left", 10)
+	chat_history_margin.add_theme_constant_override("margin_top", 4)
+	chat_history_margin.add_theme_constant_override("margin_right", 22)
+	chat_history_margin.add_theme_constant_override("margin_bottom", 8)
+	chat_history_scroll.add_child(chat_history_margin)
 	chat_history_list = VBoxContainer.new()
-	chat_history_list.custom_minimum_size.x = 400.0
 	chat_history_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	chat_history_list.add_theme_constant_override("separation", 10)
-	chat_history_scroll.add_child(chat_history_list)
+	chat_history_margin.add_child(chat_history_list)
 	chat_empty_label = _make_label("暂无聊天消息", 20, Color("777777"), HORIZONTAL_ALIGNMENT_CENTER)
-	chat_empty_label.custom_minimum_size = Vector2(400, 80)
+	chat_empty_label.custom_minimum_size = Vector2(0, 80)
 	chat_history_list.add_child(chat_empty_label)
 	chat_input = TextEdit.new()
 	chat_input.placeholder_text = "输入1至40个字符"
 	chat_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	chat_input.scroll_fit_content_height = true
 	chat_input.anchor_top = 1.0
 	chat_input.anchor_bottom = 1.0
 	chat_input.offset_left = 20.0
@@ -648,6 +657,8 @@ func _build_chat_overlay() -> void:
 	chat_input.text_changed.connect(_on_chat_input_changed)
 	chat_input.gui_input.connect(_on_chat_input_gui_input)
 	drawer.add_child(chat_input)
+	chat_input.get_v_scroll_bar().visible = false
+	chat_input.get_v_scroll_bar().mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chat_send_button = Button.new()
 	chat_send_button.text = "发送文字"
 	chat_send_button.anchor_top = 1.0
@@ -1581,12 +1592,10 @@ func _on_chat_input_gui_input(event: InputEvent) -> void:
 func _layout_chat_input() -> void:
 	if chat_input == null or chat_send_button == null or chat_history_scroll == null:
 		return
-	var measured_text := chat_input.text if not chat_input.text.is_empty() else chat_input.placeholder_text
-	var single_line := main_font.get_string_size(measured_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20)
-	var input_width := clampf(single_line.x + 24.0, 180.0, 300.0)
+	var input_width := 300.0
 	var content_width := input_width - 24.0
 	var multiline := main_font.get_multiline_string_size(chat_input.text, HORIZONTAL_ALIGNMENT_LEFT, content_width, 20)
-	var input_height := clampf(multiline.y + 20.0, 54.0, 118.0)
+	var input_height := maxf(multiline.y + 20.0, 54.0)
 	chat_input.offset_left = 20.0
 	chat_input.offset_right = 20.0 + input_width
 	chat_input.offset_bottom = -18.0
@@ -1596,6 +1605,7 @@ func _layout_chat_input() -> void:
 	chat_send_button.offset_bottom = -18.0
 	chat_send_button.offset_top = -72.0
 	chat_history_scroll.offset_bottom = -(input_height + 38.0)
+	chat_input.get_v_scroll_bar().visible = false
 
 func _send_chat_sticker(sticker_id: String) -> void:
 	if local_mode or session == null or online_game_finished or not sticker_id in Protocol.CHAT_STICKER_IDS:
@@ -1696,7 +1706,7 @@ func _append_chat_history_row(message: Dictionary) -> void:
 		String(message["kind"]),
 		String(message["text"]),
 		String(message["sticker_id"]),
-		340.0
+		320.0
 	)
 	bubble.visible = true
 	var spacer := Control.new()
