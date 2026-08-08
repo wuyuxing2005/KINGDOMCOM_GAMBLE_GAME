@@ -24,6 +24,7 @@ const CHAT_STICKER_PATHS := {
 	"side_eye": "res://assets/chat/stickers/side_eye.png",
 	"black_grin": "res://assets/chat/stickers/black_grin.png",
 	"excited": "res://assets/chat/stickers/excited.png",
+	"angry_teeth": "res://assets/chat/stickers/angry_teeth.png",
 }
 const DIE_POSITIONS: Array[Vector3] = [
 	Vector3(-2.2, 0.62, -0.85),
@@ -532,7 +533,7 @@ func _build_chat_overlay() -> void:
 
 	sticker_popup = PanelContainer.new()
 	sticker_popup.position = Vector2(20, 332)
-	sticker_popup.size = Vector2(300, 206)
+	sticker_popup.size = Vector2(300, 303)
 	sticker_popup.add_theme_stylebox_override("panel", _make_white_chat_style(16, Color(0, 0, 0, 0.24), 7))
 	sticker_popup.mouse_filter = Control.MOUSE_FILTER_STOP
 	sticker_popup.visible = false

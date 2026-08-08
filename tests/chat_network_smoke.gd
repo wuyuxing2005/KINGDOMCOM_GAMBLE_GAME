@@ -84,11 +84,11 @@ func _run() -> void:
 	host.send_chat_sticker("missing_sticker")
 	if not await _wait_until(func() -> bool: return host_errors.size() == 3):
 		_fail("无效聊天消息未被服务器拒绝")
-	if host_messages.size() != 7 or guest_messages.size() != 7:
+	if host_messages.size() != 8 or guest_messages.size() != 8:
 		_fail("无效聊天消息被错误广播")
 
 	if failures == 0:
-		print("PASS: 联机文字、六个表情、发送方标记和输入校验测试通过")
+		print("PASS: 联机文字、七个表情、发送方标记和输入校验测试通过")
 	_finish(server)
 
 func _assert_message(message: Dictionary, player_index: int, kind: String, text: String, sticker_id: String) -> void:

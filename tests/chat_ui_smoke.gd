@@ -27,8 +27,8 @@ func _run() -> void:
 		_fail("快捷表情浮层未打开")
 	if not scene._can_human_act():
 		_fail("快捷表情浮层错误阻止骰子操作")
-	if scene.sticker_popup.get_node("StickerMargin/StickerGrid").get_child_count() != 6:
-		_fail("快捷表情浮层不是六项3×2网格")
+	if scene.sticker_popup.get_node("StickerMargin/StickerGrid").get_child_count() != 7:
+		_fail("快捷表情浮层未显示七个表情")
 	await process_frame
 	_capture("res://build/chat-sticker-popup-smoke.png")
 	scene._send_chat_sticker("smile")
