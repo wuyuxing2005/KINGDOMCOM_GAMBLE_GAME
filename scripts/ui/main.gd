@@ -69,10 +69,14 @@ var roll_again_button: Button
 var bank_button: Button
 var chat_entry: HBoxContainer
 var chat_preview_button: Button
+var chat_preview_label: Label
+var chat_preview_sticker: TextureRect
 var quick_sticker_button: Button
 var sticker_popup: PanelContainer
 var chat_overlay: Control
-var chat_input: LineEdit
+var chat_input: TextEdit
+var chat_send_button: Button
+var chat_input_adjusting := false
 var chat_history_scroll: ScrollContainer
 var chat_history_list: VBoxContainer
 var chat_empty_label: Label
@@ -311,7 +315,7 @@ func _build_menu() -> void:
 	_style_button(update_button, 21)
 	update_button.pressed.connect(_check_for_update)
 	menu_screen.add_child(update_button)
-	var display_version := "1.1.6-chat-test.3" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	var display_version := "1.1.6-chat-test.4" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
 	update_status_label = _make_label("v%s" % display_version, 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
 	update_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	update_status_label.position = Vector2(-280, 78)
@@ -493,15 +497,28 @@ func _build_chat_overlay() -> void:
 	chat_entry.z_index = 6
 	game_hud.add_child(chat_entry)
 	chat_preview_button = Button.new()
-	chat_preview_button.text = "暂无消息，点击查看"
 	chat_preview_button.custom_minimum_size = Vector2(238, 56)
 	chat_preview_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	chat_preview_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	chat_preview_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	chat_preview_button.add_theme_constant_override("icon_max_width", 32)
 	_style_modern_chat_button(chat_preview_button, 18)
 	chat_preview_button.pressed.connect(_open_chat)
 	chat_entry.add_child(chat_preview_button)
+	chat_preview_button.text = ""
+	chat_preview_label = _make_label("暂无消息，点击查看", 18, INK)
+	chat_preview_label.position = Vector2(12, 10)
+	chat_preview_label.size = Vector2(214, 36)
+	chat_preview_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chat_preview_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	chat_preview_label.clip_text = true
+	chat_preview_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chat_preview_button.add_child(chat_preview_label)
+	chat_preview_sticker = TextureRect.new()
+	chat_preview_sticker.position = Vector2(12, 12)
+	chat_preview_sticker.size = Vector2(32, 32)
+	chat_preview_sticker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	chat_preview_sticker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	chat_preview_sticker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chat_preview_sticker.visible = false
+	chat_preview_button.add_child(chat_preview_sticker)
 	quick_sticker_button = Button.new()
 	quick_sticker_button.custom_minimum_size = Vector2(54, 56)
 	quick_sticker_button.icon = sticker_textures["smile"]
@@ -608,9 +625,9 @@ func _build_chat_overlay() -> void:
 	chat_empty_label = _make_label("暂无聊天消息", 20, Color("777777"), HORIZONTAL_ALIGNMENT_CENTER)
 	chat_empty_label.custom_minimum_size = Vector2(400, 80)
 	chat_history_list.add_child(chat_empty_label)
-	chat_input = LineEdit.new()
+	chat_input = TextEdit.new()
 	chat_input.placeholder_text = "输入1至40个字符"
-	chat_input.max_length = 40
+	chat_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	chat_input.anchor_top = 1.0
 	chat_input.anchor_bottom = 1.0
 	chat_input.offset_left = 20.0
@@ -628,21 +645,17 @@ func _build_chat_overlay() -> void:
 	var input_focus := input_style.duplicate()
 	input_focus.border_color = Color("8b8b8b")
 	chat_input.add_theme_stylebox_override("focus", input_focus)
-	chat_input.text_submitted.connect(func(_message: String) -> void: _send_chat_text())
+	chat_input.text_changed.connect(_on_chat_input_changed)
+	chat_input.gui_input.connect(_on_chat_input_gui_input)
 	drawer.add_child(chat_input)
-	var send_button := Button.new()
-	send_button.text = "发送文字"
-	send_button.anchor_left = 1.0
-	send_button.anchor_top = 1.0
-	send_button.anchor_right = 1.0
-	send_button.anchor_bottom = 1.0
-	send_button.offset_left = -106.0
-	send_button.offset_top = -72.0
-	send_button.offset_right = -20.0
-	send_button.offset_bottom = -18.0
-	_style_modern_chat_button(send_button, 18)
-	send_button.pressed.connect(_send_chat_text)
-	drawer.add_child(send_button)
+	chat_send_button = Button.new()
+	chat_send_button.text = "发送文字"
+	chat_send_button.anchor_top = 1.0
+	chat_send_button.anchor_bottom = 1.0
+	_style_modern_chat_button(chat_send_button, 18)
+	chat_send_button.pressed.connect(_send_chat_text)
+	drawer.add_child(chat_send_button)
+	_layout_chat_input()
 
 func _make_chat_bubble(_is_local: bool) -> Panel:
 	var bubble := Panel.new()
@@ -655,7 +668,7 @@ func _make_chat_bubble(_is_local: bool) -> Panel:
 	text_label.name = "MessageText"
 	text_label.position = Vector2(14, 10)
 	text_label.size = Vector2(36, 28)
-	text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	text_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	text_label.clip_text = true
 	bubble.add_child(text_label)
@@ -681,6 +694,11 @@ func _layout_chat_bubbles(viewport_width: float = -1.0) -> void:
 	else:
 		local_chat_bubble.position = Vector2(332.0, 86.0)
 		opponent_chat_bubble.position = Vector2(effective_width - 332.0 - opponent_chat_bubble.size.x, 86.0)
+	if local_chat_bubble.visible and opponent_chat_bubble.visible:
+		var local_rect := Rect2(local_chat_bubble.position, local_chat_bubble.size)
+		var opponent_rect := Rect2(opponent_chat_bubble.position, opponent_chat_bubble.size)
+		if local_rect.intersects(opponent_rect):
+			opponent_chat_bubble.position.y = local_chat_bubble.position.y + local_chat_bubble.size.y + 12.0
 
 func _build_rules_overlay() -> void:
 	rules_overlay = Control.new()
@@ -1517,6 +1535,7 @@ func _open_chat() -> void:
 		return
 	_close_sticker_popup()
 	chat_input.clear()
+	_layout_chat_input()
 	chat_overlay.visible = true
 	chat_input.grab_focus()
 	_scroll_chat_to_bottom.call_deferred()
@@ -1538,7 +1557,45 @@ func _send_chat_text() -> void:
 		return
 	network_client.send_chat_text(message)
 	chat_input.clear()
+	_layout_chat_input()
 	chat_input.grab_focus()
+
+func _on_chat_input_changed() -> void:
+	if chat_input_adjusting:
+		return
+	if chat_input.text.length() > 40:
+		chat_input_adjusting = true
+		chat_input.text = chat_input.text.left(40)
+		var last_line := chat_input.get_line_count() - 1
+		chat_input.set_caret_line(last_line)
+		chat_input.set_caret_column(chat_input.get_line(last_line).length())
+		chat_input_adjusting = false
+	_layout_chat_input()
+
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+			chat_input.accept_event()
+			_send_chat_text()
+
+func _layout_chat_input() -> void:
+	if chat_input == null or chat_send_button == null or chat_history_scroll == null:
+		return
+	var measured_text := chat_input.text if not chat_input.text.is_empty() else chat_input.placeholder_text
+	var single_line := main_font.get_string_size(measured_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20)
+	var input_width := clampf(single_line.x + 24.0, 180.0, 300.0)
+	var content_width := input_width - 24.0
+	var multiline := main_font.get_multiline_string_size(chat_input.text, HORIZONTAL_ALIGNMENT_LEFT, content_width, 20)
+	var input_height := clampf(multiline.y + 20.0, 54.0, 118.0)
+	chat_input.offset_left = 20.0
+	chat_input.offset_right = 20.0 + input_width
+	chat_input.offset_bottom = -18.0
+	chat_input.offset_top = -18.0 - input_height
+	chat_send_button.offset_left = 30.0 + input_width
+	chat_send_button.offset_right = 116.0 + input_width
+	chat_send_button.offset_bottom = -18.0
+	chat_send_button.offset_top = -72.0
+	chat_history_scroll.offset_bottom = -(input_height + 38.0)
 
 func _send_chat_sticker(sticker_id: String) -> void:
 	if local_mode or session == null or online_game_finished or not sticker_id in Protocol.CHAT_STICKER_IDS:
@@ -1565,9 +1622,9 @@ func _on_chat_received(player_index: int, kind: String, text: String, sticker_id
 	chat_history.append(message)
 	_update_chat_preview(message)
 	_append_chat_history_row(message)
-	_apply_chat_bubble_content(bubble, text_label, sticker_view, kind, text, sticker_id)
-	_layout_chat_bubbles()
+	_apply_chat_bubble_content(bubble, text_label, sticker_view, kind, text, sticker_id, _get_transient_chat_max_width())
 	bubble.visible = true
+	_layout_chat_bubbles()
 	timer.start(CHAT_MESSAGE_SECONDS)
 
 func _clear_chat_messages() -> void:
@@ -1576,8 +1633,9 @@ func _clear_chat_messages() -> void:
 	_close_sticker_popup()
 	chat_history.clear()
 	if chat_preview_button != null:
-		chat_preview_button.text = "暂无消息，点击查看"
-		chat_preview_button.icon = null
+		chat_preview_label.text = "暂无消息，点击查看"
+		chat_preview_label.size = Vector2(214, 36)
+		chat_preview_sticker.visible = false
 	if chat_history_list != null:
 		for child in chat_history_list.get_children():
 			if child != chat_empty_label:
@@ -1610,11 +1668,18 @@ func _on_chat_shade_input(event: InputEvent) -> void:
 func _update_chat_preview(message: Dictionary) -> void:
 	var sender := "你：" if int(message["player_index"]) == local_player_index else "对手："
 	if message["kind"] == Protocol.CHAT_KIND_TEXT:
-		chat_preview_button.icon = null
-		chat_preview_button.text = sender + String(message["text"])
+		chat_preview_label.text = sender + String(message["text"])
+		chat_preview_label.position = Vector2(12, 10)
+		chat_preview_label.size = Vector2(214, 36)
+		chat_preview_sticker.visible = false
 	else:
-		chat_preview_button.icon = sticker_textures[String(message["sticker_id"])]
-		chat_preview_button.text = sender
+		var sender_width := main_font.get_string_size(sender, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		chat_preview_label.text = sender
+		chat_preview_label.position = Vector2(12, 10)
+		chat_preview_label.size = Vector2(sender_width + 2.0, 36)
+		chat_preview_sticker.texture = sticker_textures[String(message["sticker_id"])]
+		chat_preview_sticker.position = Vector2(16.0 + sender_width, 12)
+		chat_preview_sticker.visible = true
 
 func _append_chat_history_row(message: Dictionary) -> void:
 	chat_empty_label.visible = false
@@ -1630,7 +1695,8 @@ func _append_chat_history_row(message: Dictionary) -> void:
 		sticker_view,
 		String(message["kind"]),
 		String(message["text"]),
-		String(message["sticker_id"])
+		String(message["sticker_id"]),
+		340.0
 	)
 	bubble.visible = true
 	var spacer := Control.new()
@@ -1644,7 +1710,7 @@ func _append_chat_history_row(message: Dictionary) -> void:
 	chat_history_list.add_child(row)
 	_scroll_chat_to_bottom.call_deferred()
 
-func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: TextureRect, kind: String, text: String, sticker_id: String) -> void:
+func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: TextureRect, kind: String, text: String, sticker_id: String, max_text_width: float = 480.0) -> void:
 	bubble.custom_minimum_size = Vector2.ZERO
 	if kind == Protocol.CHAT_KIND_STICKER:
 		bubble.size = Vector2(120, 120)
@@ -1656,9 +1722,9 @@ func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: 
 		sticker_view.visible = true
 		return
 	var single_line := main_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 21)
-	var content_width := clampf(single_line.x, 36.0, 280.0)
+	var content_width := clampf(single_line.x, 36.0, max_text_width)
 	var multiline := main_font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, content_width, 21)
-	var content_height := maxf(multiline.y, 28.0)
+	var content_height := maxf(multiline.y + 4.0, 28.0)
 	bubble.size = Vector2(content_width + 28.0, content_height + 20.0)
 	bubble.custom_minimum_size = bubble.size
 	text_label.text = text
@@ -1666,6 +1732,12 @@ func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: 
 	text_label.size = Vector2(content_width, content_height)
 	text_label.visible = true
 	sticker_view.visible = false
+
+func _get_transient_chat_max_width() -> float:
+	var viewport_width := get_viewport().get_visible_rect().size.x
+	if viewport_width >= 1120.0:
+		return 480.0
+	return clampf(viewport_width * 0.42 - 28.0, 220.0, 360.0)
 
 func _scroll_chat_to_bottom() -> void:
 	if chat_history_scroll == null:

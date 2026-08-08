@@ -17,7 +17,7 @@ func _run() -> void:
 	scene._start_network_game(snapshot)
 	await process_frame
 	scene.input_locked = false
-	if not scene.chat_entry.visible or scene.chat_preview_button.text != "暂无消息，点击查看":
+	if not scene.chat_entry.visible or scene.chat_preview_label.text != "暂无消息，点击查看":
 		_fail("联机对局未显示空状态缩略聊天框")
 	if scene.chat_preview_button.disabled or scene.quick_sticker_button.disabled:
 		_fail("联机聊天入口被错误禁用")
@@ -36,27 +36,50 @@ func _run() -> void:
 		_fail("发送快捷表情后浮层未关闭")
 
 	scene._open_chat()
-	if not scene.chat_overlay.visible or scene.chat_input.max_length != 40:
-		_fail("历史抽屉或40字符限制不正确")
+	if not scene.chat_overlay.visible or not (scene.chat_input is TextEdit):
+		_fail("历史抽屉或动态多行输入框未正确创建")
 	if scene._can_human_act():
 		_fail("历史抽屉打开时仍可操作骰子")
 	await process_frame
 	_capture("res://build/chat-history-drawer-smoke.png")
+	scene.chat_input.text = "短"
+	scene._on_chat_input_changed()
+	var short_input_size: Vector2 = scene.chat_input.size
+	scene.chat_input.text = "测".repeat(40)
+	scene._on_chat_input_changed()
+	var full_input_size: Vector2 = scene.chat_input.size
+	if scene.chat_input.text.length() != 40 or full_input_size.x <= short_input_size.x or full_input_size.y <= short_input_size.y:
+		_fail("输入框没有随40字内容先扩宽再增高")
+	await process_frame
+	_capture("res://build/chat-input-40-smoke.png")
+	scene.chat_input.text = "字".repeat(45)
+	scene._on_chat_input_changed()
+	if scene.chat_input.text.length() != 40:
+		_fail("输入框没有在40字符处截断")
 	scene.chat_input.text = "抽屉发送测试"
-	scene.chat_input.text_submitted.emit(scene.chat_input.text)
+	var enter_event := InputEventKey.new()
+	enter_event.pressed = true
+	enter_event.keycode = KEY_ENTER
+	scene.chat_input.gui_input.emit(enter_event)
 	if not scene.chat_input.text.is_empty() or not scene.chat_overlay.visible:
 		_fail("Enter发送后输入框未清空或历史抽屉被错误关闭")
 
 	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "你好", "")
 	var short_size: Vector2 = scene.local_chat_bubble.size
-	if scene.chat_history.size() != 1 or scene.chat_preview_button.text != "你：你好":
+	if scene.chat_history.size() != 1 or scene.chat_preview_label.text != "你：你好":
 		_fail("本地文字未写入历史或缩略框")
 	if not _is_white_bubble(scene.local_chat_bubble):
 		_fail("即时文字未使用白色圆角气泡")
-	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "这是一条用于检查自动换行以及气泡宽高变化的较长聊天消息", "")
+	var full_text := "聊".repeat(40)
+	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, full_text, "")
 	var long_size: Vector2 = scene.local_chat_bubble.size
-	if long_size.x <= short_size.x or long_size.x > 308.1 or long_size.y <= short_size.y:
-		_fail("长文字气泡未按内容扩展或超过最大宽度")
+	if scene.local_chat_text.text != full_text or long_size.x <= short_size.x or long_size.x > 508.1 or long_size.y <= short_size.y:
+		_fail("40字气泡未完整显示、未按内容扩展或超过最大宽度")
+	if scene.local_chat_text.autowrap_mode != TextServer.AUTOWRAP_ARBITRARY:
+		_fail("40字气泡未使用逐字符换行")
+	await process_frame
+	if scene.local_chat_text.get_line_count() < 2 or scene.local_chat_text.get_visible_line_count() < 2:
+		_fail("40字气泡没有完整渲染为多行")
 	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "好", "")
 	if scene.local_chat_bubble.size.x >= long_size.x or scene.local_chat_bubble.size.y >= long_size.y:
 		_fail("长文字切换为短文字后气泡没有随字体内容缩小")
@@ -66,13 +89,21 @@ func _run() -> void:
 	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, "你好", "")
 	if scene.local_chat_bubble.size.x >= 120.0 or scene.local_chat_bubble.size.y >= 120.0:
 		_fail("表情切换为短文字后仍保留表情气泡尺寸")
+	scene._on_chat_received(0, Protocol.CHAT_KIND_TEXT, full_text, "")
+	scene._on_chat_received(1, Protocol.CHAT_KIND_TEXT, full_text, "")
+	var local_rect := Rect2(scene.local_chat_bubble.position, scene.local_chat_bubble.size)
+	var opponent_rect := Rect2(scene.opponent_chat_bubble.position, scene.opponent_chat_bubble.size)
+	if local_rect.intersects(opponent_rect):
+		_fail("双方40字即时气泡发生重叠")
 	scene._on_chat_received(1, Protocol.CHAT_KIND_STICKER, "", "crying")
-	if scene.chat_preview_button.text != "对手：" or scene.chat_preview_button.icon == null:
+	if scene.chat_preview_label.text != "对手：" or not scene.chat_preview_sticker.visible:
 		_fail("对手表情未显示在缩略聊天框")
+	if scene.chat_preview_sticker.position.x <= scene.chat_preview_label.position.x + scene.chat_preview_label.size.x:
+		_fail("缩略聊天框的表情仍显示在发送者前面")
 	if scene.opponent_chat_bubble.size != Vector2(120, 120) or not scene.opponent_chat_sticker.visible:
 		_fail("表情未使用贴合图片的120×120白色气泡")
-	if scene.chat_history.size() != 6 or scene.chat_history_list.get_child_count() != 7:
-		_fail("完整历史未按接收顺序保留六条消息")
+	if scene.chat_history.size() != 8 or scene.chat_history_list.get_child_count() != 9:
+		_fail("完整历史未按接收顺序保留八条消息")
 	if not scene.local_chat_bubble.visible or not scene.opponent_chat_bubble.visible:
 		_fail("双方即时气泡不能同时显示")
 	if scene.local_chat_timer.time_left < 5.8 or scene.opponent_chat_timer.time_left < 5.8:
@@ -96,13 +127,13 @@ func _run() -> void:
 
 	scene._start_network_game(_make_snapshot())
 	await process_frame
-	if not scene.chat_history.is_empty() or scene.chat_preview_button.text != "暂无消息，点击查看":
+	if not scene.chat_history.is_empty() or scene.chat_preview_label.text != "暂无消息，点击查看" or scene.chat_preview_sticker.visible:
 		_fail("重赛开始后未清空当前局聊天历史")
 	scene._start_selected_game()
 	if scene.chat_entry.visible:
 		_fail("单人模式错误显示聊天入口")
 	if failures == 0:
-		print("PASS: 缩略历史、侧边抽屉、非模态表情、动态白色气泡和当前局清理测试通过")
+		print("PASS: 表情顺序、40字输入、动态输入尺寸、动态白色气泡和当前局清理测试通过")
 	quit(1 if failures > 0 else 0)
 
 func _make_snapshot() -> GameSnapshot:
