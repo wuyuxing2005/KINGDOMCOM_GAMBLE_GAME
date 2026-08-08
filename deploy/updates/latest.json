@@ -1,16 +1,16 @@
 {
-  "tag_name": "v1.1.6",
-  "html_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/tag/v1.1.6",
+  "tag_name": "v1.2.0",
+  "html_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/tag/v1.2.0",
   "assets": [
     {
       "name": "medieval_dice-debug.apk",
       "browser_download_url": "http://121.196.201.193:9080/updates/medieval_dice-debug.apk",
-      "fallback_download_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/download/v1.1.6/medieval_dice-debug.apk"
+      "fallback_download_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/download/v1.2.0/medieval_dice-debug.apk"
     },
     {
       "name": "medieval_dice-windows-x86_64.zip",
       "browser_download_url": "http://121.196.201.193:9080/updates/medieval_dice-windows-x86_64.zip",
-      "fallback_download_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/download/v1.1.6/medieval_dice-windows-x86_64.zip"
+      "fallback_download_url": "https://github.com/wuyuxing2005/KINGDOMCOM_GAMBLE_GAME/releases/download/v1.2.0/medieval_dice-windows-x86_64.zip"
     }
   ]
 }

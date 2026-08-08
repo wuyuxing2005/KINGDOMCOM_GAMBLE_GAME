@@ -28,3 +28,9 @@
 - 霞鹜文楷 v1.522：<https://github.com/lxgw/LxgwWenkai>
 - 许可：SIL Open Font License 1.1，许可证副本为 `licenses/LXGW-WenKai-OFL-1.1.txt`。
 
+## 用户提供的聊天表情
+
+- 文件：`assets/chat/stickers/*.png`
+- 用途：联机对局内置图片表情。
+- 来源：用户在本任务中提供的六张图片，用于本项目联机聊天功能；不额外声明第三方授权。
+- 处理：使用 imagegen 编辑流程将背景替换为键控色，去背后裁剪主体，最长边统一为 208 像素，并居中放入 256×256 透明 PNG 画布。

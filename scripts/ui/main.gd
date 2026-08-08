@@ -9,12 +9,22 @@ const Server = preload("res://scripts/network/multiplayer_server.gd")
 const Client = preload("res://scripts/network/network_client.gd")
 const NetworkProxy = preload("res://scripts/network/network_session_proxy.gd")
 const NetworkControl = preload("res://scripts/controllers/network_controller.gd")
+const Protocol = preload("res://scripts/network/network_protocol.gd")
 const UpdateManager = preload("res://scripts/update/update_manager.gd")
 
 const PLAYER_COLOR := Color("2b7898")
 const AI_COLOR := Color("a13e2d")
 const INK := Color("37271b")
 const GOLD := Color("d9ad37")
+const CHAT_MESSAGE_SECONDS := 6.0
+const CHAT_STICKER_PATHS := {
+	"smile": "res://assets/chat/stickers/smile.png",
+	"heart_eyes": "res://assets/chat/stickers/heart_eyes.png",
+	"crying": "res://assets/chat/stickers/crying.png",
+	"side_eye": "res://assets/chat/stickers/side_eye.png",
+	"black_grin": "res://assets/chat/stickers/black_grin.png",
+	"excited": "res://assets/chat/stickers/excited.png",
+}
 const DIE_POSITIONS: Array[Vector3] = [
 	Vector3(-2.2, 0.62, -0.85),
 	Vector3(-0.7, 0.62, -1.15),
@@ -57,6 +67,30 @@ var selected_label: Label
 var status_label: Label
 var roll_again_button: Button
 var bank_button: Button
+var chat_entry: HBoxContainer
+var chat_preview_button: Button
+var chat_preview_label: Label
+var chat_preview_sticker: TextureRect
+var quick_sticker_button: Button
+var sticker_popup: PanelContainer
+var chat_overlay: Control
+var chat_input: TextEdit
+var chat_send_button: Button
+var chat_input_adjusting := false
+var chat_history_scroll: ScrollContainer
+var chat_history_margin: MarginContainer
+var chat_history_list: VBoxContainer
+var chat_empty_label: Label
+var local_chat_bubble: Panel
+var opponent_chat_bubble: Panel
+var local_chat_text: Label
+var opponent_chat_text: Label
+var local_chat_sticker: TextureRect
+var opponent_chat_sticker: TextureRect
+var local_chat_timer: Timer
+var opponent_chat_timer: Timer
+var sticker_textures: Dictionary = {}
+var chat_history: Array[Dictionary] = []
 var rules_overlay: Control
 var win_overlay: Control
 var win_title: Label
@@ -132,6 +166,8 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and event.device != InputEvent.DEVICE_ID_EMULATION:
 		pointer_position = event.position
 		should_select = true
+	if should_select and sticker_popup != null and sticker_popup.visible and not sticker_popup.get_global_rect().has_point(pointer_position):
+		_close_sticker_popup()
 	if should_select and _can_human_act():
 		var touched_die := _pick_die_at_screen(pointer_position)
 		if touched_die >= 0:
@@ -145,7 +181,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("back_to_menu"):
-		if settings_overlay.visible:
+		if chat_overlay.visible:
+			_close_chat()
+		elif sticker_popup.visible:
+			_close_sticker_popup()
+		elif settings_overlay.visible:
 			_show_menu()
 		elif rules_overlay.visible:
 			rules_overlay.visible = false
@@ -249,10 +289,12 @@ func _build_ui() -> void:
 
 	_build_menu()
 	_build_game_hud()
+	_build_chat_overlay()
 	_build_rules_overlay()
 	_build_online_overlay()
 	_build_settings_overlay()
 	_build_win_overlay()
+	get_viewport().size_changed.connect(_layout_chat_bubbles)
 
 func _build_menu() -> void:
 	menu_screen = Control.new()
@@ -274,7 +316,8 @@ func _build_menu() -> void:
 	_style_button(update_button, 21)
 	update_button.pressed.connect(_check_for_update)
 	menu_screen.add_child(update_button)
-	update_status_label = _make_label("v%s" % ProjectSettings.get_setting("application/config/version", "0.0.0"), 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
+	var display_version := "1.1.6-chat-test.5" if OS.has_feature("chat_test") else str(ProjectSettings.get_setting("application/config/version", "0.0.0"))
+	update_status_label = _make_label("v%s" % display_version, 17, Color("e8d8b9"), HORIZONTAL_ALIGNMENT_RIGHT)
 	update_status_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	update_status_label.position = Vector2(-280, 78)
 	update_status_label.size = Vector2(260, 52)
@@ -442,6 +485,231 @@ func _build_game_hud() -> void:
 	status_label.add_theme_constant_override("shadow_offset_x", 2)
 	status_label.add_theme_constant_override("shadow_offset_y", 2)
 	game_hud.add_child(status_label)
+
+func _build_chat_overlay() -> void:
+	for sticker_id in Protocol.CHAT_STICKER_IDS:
+		sticker_textures[sticker_id] = load(CHAT_STICKER_PATHS[sticker_id])
+
+	chat_entry = HBoxContainer.new()
+	chat_entry.position = Vector2(20, 268)
+	chat_entry.size = Vector2(300, 56)
+	chat_entry.add_theme_constant_override("separation", 8)
+	chat_entry.visible = false
+	chat_entry.z_index = 6
+	game_hud.add_child(chat_entry)
+	chat_preview_button = Button.new()
+	chat_preview_button.custom_minimum_size = Vector2(238, 56)
+	chat_preview_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_style_modern_chat_button(chat_preview_button, 18)
+	chat_preview_button.pressed.connect(_open_chat)
+	chat_entry.add_child(chat_preview_button)
+	chat_preview_button.text = ""
+	chat_preview_label = _make_label("暂无消息，点击查看", 18, INK)
+	chat_preview_label.position = Vector2(12, 10)
+	chat_preview_label.size = Vector2(214, 36)
+	chat_preview_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	chat_preview_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	chat_preview_label.clip_text = true
+	chat_preview_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chat_preview_button.add_child(chat_preview_label)
+	chat_preview_sticker = TextureRect.new()
+	chat_preview_sticker.position = Vector2(12, 12)
+	chat_preview_sticker.size = Vector2(32, 32)
+	chat_preview_sticker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	chat_preview_sticker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	chat_preview_sticker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chat_preview_sticker.visible = false
+	chat_preview_button.add_child(chat_preview_sticker)
+	quick_sticker_button = Button.new()
+	quick_sticker_button.custom_minimum_size = Vector2(54, 56)
+	quick_sticker_button.icon = sticker_textures["smile"]
+	quick_sticker_button.expand_icon = true
+	quick_sticker_button.add_theme_constant_override("icon_max_width", 38)
+	quick_sticker_button.tooltip_text = "快捷表情"
+	_style_modern_chat_button(quick_sticker_button, 18)
+	quick_sticker_button.pressed.connect(_toggle_sticker_popup)
+	chat_entry.add_child(quick_sticker_button)
+
+	sticker_popup = PanelContainer.new()
+	sticker_popup.position = Vector2(20, 332)
+	sticker_popup.size = Vector2(300, 206)
+	sticker_popup.add_theme_stylebox_override("panel", _make_white_chat_style(16, Color(0, 0, 0, 0.24), 7))
+	sticker_popup.mouse_filter = Control.MOUSE_FILTER_STOP
+	sticker_popup.visible = false
+	sticker_popup.z_index = 10
+	game_hud.add_child(sticker_popup)
+	var sticker_margin := MarginContainer.new()
+	sticker_margin.name = "StickerMargin"
+	sticker_margin.add_theme_constant_override("margin_left", 10)
+	sticker_margin.add_theme_constant_override("margin_top", 10)
+	sticker_margin.add_theme_constant_override("margin_right", 10)
+	sticker_margin.add_theme_constant_override("margin_bottom", 10)
+	sticker_popup.add_child(sticker_margin)
+	var quick_grid := GridContainer.new()
+	quick_grid.name = "StickerGrid"
+	quick_grid.columns = 3
+	quick_grid.add_theme_constant_override("h_separation", 8)
+	quick_grid.add_theme_constant_override("v_separation", 8)
+	sticker_margin.add_child(quick_grid)
+	for sticker_id in Protocol.CHAT_STICKER_IDS:
+		var sticker_button := Button.new()
+		sticker_button.custom_minimum_size = Vector2(88, 89)
+		sticker_button.icon = sticker_textures[sticker_id]
+		sticker_button.expand_icon = true
+		sticker_button.add_theme_constant_override("icon_max_width", 68)
+		sticker_button.tooltip_text = sticker_id
+		_style_modern_chat_button(sticker_button, 16)
+		sticker_button.pressed.connect(_send_chat_sticker.bind(sticker_id))
+		quick_grid.add_child(sticker_button)
+
+	local_chat_bubble = _make_chat_bubble(true)
+	game_hud.add_child(local_chat_bubble)
+	local_chat_text = local_chat_bubble.get_node("MessageText")
+	local_chat_sticker = local_chat_bubble.get_node("Sticker")
+	local_chat_timer = Timer.new()
+	local_chat_timer.one_shot = true
+	local_chat_timer.timeout.connect(func() -> void: local_chat_bubble.visible = false)
+	add_child(local_chat_timer)
+
+	opponent_chat_bubble = _make_chat_bubble(false)
+	game_hud.add_child(opponent_chat_bubble)
+	opponent_chat_text = opponent_chat_bubble.get_node("MessageText")
+	opponent_chat_sticker = opponent_chat_bubble.get_node("Sticker")
+	opponent_chat_timer = Timer.new()
+	opponent_chat_timer.one_shot = true
+	opponent_chat_timer.timeout.connect(func() -> void: opponent_chat_bubble.visible = false)
+	add_child(opponent_chat_timer)
+	_layout_chat_bubbles()
+
+	chat_overlay = Control.new()
+	chat_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	chat_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	chat_overlay.visible = false
+	chat_overlay.z_index = 20
+	ui_root.add_child(chat_overlay)
+	var shade := ColorRect.new()
+	shade.color = Color(0, 0, 0, 0.42)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.gui_input.connect(_on_chat_shade_input)
+	chat_overlay.add_child(shade)
+	var drawer := Panel.new()
+	drawer.anchor_bottom = 1.0
+	drawer.offset_right = 440.0
+	drawer.add_theme_stylebox_override("panel", _make_drawer_style())
+	chat_overlay.add_child(drawer)
+	var title := _make_label("聊天记录", 30, INK)
+	title.position = Vector2(24, 12)
+	title.size = Vector2(300, 50)
+	drawer.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "×"
+	close_button.position = Vector2(374, 12)
+	close_button.size = Vector2(48, 48)
+	_style_modern_chat_button(close_button, 28)
+	close_button.pressed.connect(_close_chat)
+	drawer.add_child(close_button)
+	chat_history_scroll = ScrollContainer.new()
+	chat_history_scroll.anchor_right = 1.0
+	chat_history_scroll.anchor_bottom = 1.0
+	chat_history_scroll.offset_left = 20.0
+	chat_history_scroll.offset_top = 70.0
+	chat_history_scroll.offset_right = -20.0
+	chat_history_scroll.offset_bottom = -92.0
+	chat_history_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	drawer.add_child(chat_history_scroll)
+	chat_history_margin = MarginContainer.new()
+	chat_history_margin.custom_minimum_size.x = 400.0
+	chat_history_margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_history_margin.add_theme_constant_override("margin_left", 10)
+	chat_history_margin.add_theme_constant_override("margin_top", 4)
+	chat_history_margin.add_theme_constant_override("margin_right", 22)
+	chat_history_margin.add_theme_constant_override("margin_bottom", 8)
+	chat_history_scroll.add_child(chat_history_margin)
+	chat_history_list = VBoxContainer.new()
+	chat_history_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	chat_history_list.add_theme_constant_override("separation", 10)
+	chat_history_margin.add_child(chat_history_list)
+	chat_empty_label = _make_label("暂无聊天消息", 20, Color("777777"), HORIZONTAL_ALIGNMENT_CENTER)
+	chat_empty_label.custom_minimum_size = Vector2(0, 80)
+	chat_history_list.add_child(chat_empty_label)
+	chat_input = TextEdit.new()
+	chat_input.placeholder_text = "输入1至40个字符"
+	chat_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	chat_input.scroll_fit_content_height = true
+	chat_input.anchor_top = 1.0
+	chat_input.anchor_bottom = 1.0
+	chat_input.offset_left = 20.0
+	chat_input.offset_top = -72.0
+	chat_input.offset_right = 324.0
+	chat_input.offset_bottom = -18.0
+	chat_input.add_theme_font_override("font", main_font)
+	chat_input.add_theme_font_size_override("font_size", 20)
+	chat_input.add_theme_color_override("font_color", INK)
+	chat_input.add_theme_color_override("placeholder_color", Color("888888"))
+	var input_style := _make_white_chat_style(10, Color(0, 0, 0, 0.12), 3)
+	input_style.content_margin_left = 12
+	input_style.content_margin_right = 12
+	chat_input.add_theme_stylebox_override("normal", input_style)
+	var input_focus := input_style.duplicate()
+	input_focus.border_color = Color("8b8b8b")
+	chat_input.add_theme_stylebox_override("focus", input_focus)
+	chat_input.text_changed.connect(_on_chat_input_changed)
+	chat_input.gui_input.connect(_on_chat_input_gui_input)
+	drawer.add_child(chat_input)
+	chat_input.get_v_scroll_bar().visible = false
+	chat_input.get_v_scroll_bar().mouse_filter = Control.MOUSE_FILTER_IGNORE
+	chat_send_button = Button.new()
+	chat_send_button.text = "发送文字"
+	chat_send_button.anchor_top = 1.0
+	chat_send_button.anchor_bottom = 1.0
+	_style_modern_chat_button(chat_send_button, 18)
+	chat_send_button.pressed.connect(_send_chat_text)
+	drawer.add_child(chat_send_button)
+	_layout_chat_input()
+
+func _make_chat_bubble(_is_local: bool) -> Panel:
+	var bubble := Panel.new()
+	bubble.add_theme_stylebox_override("panel", _make_white_chat_style(16, Color(0, 0, 0, 0.28), 6))
+	bubble.size = Vector2(64, 48)
+	bubble.visible = false
+	bubble.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bubble.z_index = 5
+	var text_label := _make_label("", 21, INK)
+	text_label.name = "MessageText"
+	text_label.position = Vector2(14, 10)
+	text_label.size = Vector2(36, 28)
+	text_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	text_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	text_label.clip_text = true
+	bubble.add_child(text_label)
+	var sticker := TextureRect.new()
+	sticker.name = "Sticker"
+	sticker.position = Vector2(12, 12)
+	sticker.size = Vector2(96, 96)
+	sticker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	sticker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	sticker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sticker.visible = false
+	bubble.add_child(sticker)
+	return bubble
+
+func _layout_chat_bubbles(viewport_width: float = -1.0) -> void:
+	if local_chat_bubble == null or opponent_chat_bubble == null:
+		return
+	var effective_width := get_viewport().get_visible_rect().size.x if viewport_width < 0.0 else viewport_width
+	var narrow := effective_width < 1120.0
+	if narrow:
+		local_chat_bubble.position = Vector2(20.0, 336.0)
+		opponent_chat_bubble.position = Vector2(effective_width - 20.0 - opponent_chat_bubble.size.x, 268.0)
+	else:
+		local_chat_bubble.position = Vector2(332.0, 86.0)
+		opponent_chat_bubble.position = Vector2(effective_width - 332.0 - opponent_chat_bubble.size.x, 86.0)
+	if local_chat_bubble.visible and opponent_chat_bubble.visible:
+		var local_rect := Rect2(local_chat_bubble.position, local_chat_bubble.size)
+		var opponent_rect := Rect2(opponent_chat_bubble.position, opponent_chat_bubble.size)
+		if local_rect.intersects(opponent_rect):
+			opponent_chat_bubble.position.y = local_chat_bubble.position.y + local_chat_bubble.size.y + 12.0
 
 func _build_rules_overlay() -> void:
 	rules_overlay = Control.new()
@@ -723,6 +991,8 @@ func _build_win_overlay() -> void:
 func _start_selected_game() -> void:
 	get_tree().paused = false
 	local_mode = true
+	_clear_chat_messages()
+	chat_entry.visible = false
 	local_player_index = 0
 	player_title_label.text = "玩家"
 	opponent_title_label.text = "电脑"
@@ -758,6 +1028,7 @@ func _bind_network_client() -> void:
 	network_client.rolled.connect(_on_rolled)
 	network_client.busted.connect(_on_busted)
 	network_client.hot_dice.connect(_on_hot_dice)
+	network_client.chat_received.connect(_on_chat_received)
 	network_client.game_finished.connect(_on_game_finished)
 	network_client.opponent_left.connect(_on_opponent_left)
 	network_client.server_error.connect(_on_network_error)
@@ -822,7 +1093,7 @@ func _begin_online_request(kind: String) -> void:
 	create_room_button.disabled = kind == "create"
 	join_room_button.disabled = kind == "join"
 	_set_online_status("正在连接服务器…")
-	var error := network_client.connect_to_server(Client.DEFAULT_SERVER_URL)
+	var error := network_client.connect_to_server(Client.get_default_server_url())
 	if error != OK:
 		pending_online_request = ""
 		create_room_button.disabled = false
@@ -857,6 +1128,10 @@ func _on_network_rematch_started(snapshot: GameSnapshot) -> void:
 func _start_network_game(snapshot: GameSnapshot) -> void:
 	get_tree().paused = false
 	local_mode = false
+	_clear_chat_messages()
+	chat_entry.visible = true
+	chat_preview_button.disabled = false
+	quick_sticker_button.disabled = false
 	online_game_finished = false
 	rematch_requested = false
 	opponent_left_after_game = false
@@ -966,6 +1241,7 @@ func _on_opponent_left() -> void:
 
 func _show_online_disconnect(message: String) -> void:
 	game_generation += 1
+	_clear_chat_messages()
 	input_locked = true
 	session = null
 	online_game_finished = false
@@ -982,6 +1258,8 @@ func _show_online_disconnect(message: String) -> void:
 func _show_menu() -> void:
 	get_tree().paused = false
 	game_generation += 1
+	_clear_chat_messages()
+	chat_entry.visible = false
 	input_locked = true
 	session = null
 	local_mode = true
@@ -1151,6 +1429,10 @@ func _run_ai_turn(generation: int) -> void:
 
 func _on_game_finished(winner_index: int) -> void:
 	input_locked = true
+	_close_chat()
+	_close_sticker_popup()
+	chat_preview_button.disabled = true
+	quick_sticker_button.disabled = true
 	status_label.text = "对局结束"
 	win_title.text = "你赢了！" if winner_index == local_player_index else ("电脑获胜" if local_mode else "对手获胜")
 	online_game_finished = not local_mode
@@ -1252,9 +1534,226 @@ func _update_buttons() -> void:
 	var enabled := _can_human_act() and latest_snapshot != null and latest_snapshot.selected_score > 0
 	roll_again_button.disabled = not enabled
 	bank_button.disabled = not enabled
+	var chat_disabled := local_mode or online_game_finished or session == null
+	chat_preview_button.disabled = chat_disabled
+	quick_sticker_button.disabled = chat_disabled
 
 func _can_human_act() -> bool:
-	return session != null and not input_locked and session.current_player == local_player_index and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible and not settings_overlay.visible
+	return session != null and not input_locked and session.current_player == local_player_index and session.phase == Session.Phase.AWAITING_SELECTION and not rules_overlay.visible and not win_overlay.visible and not settings_overlay.visible and not chat_overlay.visible
+
+func _open_chat() -> void:
+	if local_mode or session == null or online_game_finished or not game_hud.visible:
+		return
+	_close_sticker_popup()
+	chat_input.clear()
+	_layout_chat_input()
+	chat_overlay.visible = true
+	chat_input.grab_focus()
+	_scroll_chat_to_bottom.call_deferred()
+	_update_buttons()
+
+func _close_chat() -> void:
+	if chat_overlay == null:
+		return
+	chat_overlay.visible = false
+	if chat_input != null:
+		chat_input.release_focus()
+	_update_buttons()
+
+func _send_chat_text() -> void:
+	if local_mode or session == null or online_game_finished:
+		return
+	var message := chat_input.text.strip_edges()
+	if message.is_empty() or message.length() > 40:
+		return
+	network_client.send_chat_text(message)
+	chat_input.clear()
+	_layout_chat_input()
+	chat_input.grab_focus()
+
+func _on_chat_input_changed() -> void:
+	if chat_input_adjusting:
+		return
+	if chat_input.text.length() > 40:
+		chat_input_adjusting = true
+		chat_input.text = chat_input.text.left(40)
+		var last_line := chat_input.get_line_count() - 1
+		chat_input.set_caret_line(last_line)
+		chat_input.set_caret_column(chat_input.get_line(last_line).length())
+		chat_input_adjusting = false
+	_layout_chat_input()
+
+func _on_chat_input_gui_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER:
+			chat_input.accept_event()
+			_send_chat_text()
+
+func _layout_chat_input() -> void:
+	if chat_input == null or chat_send_button == null or chat_history_scroll == null:
+		return
+	var input_width := 300.0
+	var content_width := input_width - 24.0
+	var multiline := main_font.get_multiline_string_size(chat_input.text, HORIZONTAL_ALIGNMENT_LEFT, content_width, 20)
+	var input_height := maxf(multiline.y + 20.0, 54.0)
+	chat_input.offset_left = 20.0
+	chat_input.offset_right = 20.0 + input_width
+	chat_input.offset_bottom = -18.0
+	chat_input.offset_top = -18.0 - input_height
+	chat_send_button.offset_left = 30.0 + input_width
+	chat_send_button.offset_right = 116.0 + input_width
+	chat_send_button.offset_bottom = -18.0
+	chat_send_button.offset_top = -72.0
+	chat_history_scroll.offset_bottom = -(input_height + 38.0)
+	chat_input.get_v_scroll_bar().visible = false
+
+func _send_chat_sticker(sticker_id: String) -> void:
+	if local_mode or session == null or online_game_finished or not sticker_id in Protocol.CHAT_STICKER_IDS:
+		return
+	network_client.send_chat_sticker(sticker_id)
+	_close_sticker_popup()
+
+func _on_chat_received(player_index: int, kind: String, text: String, sticker_id: String) -> void:
+	if local_mode or session == null or online_game_finished:
+		return
+	if kind != Protocol.CHAT_KIND_TEXT and (kind != Protocol.CHAT_KIND_STICKER or not sticker_textures.has(sticker_id)):
+		return
+	var is_local := player_index == local_player_index
+	var bubble := local_chat_bubble if is_local else opponent_chat_bubble
+	var text_label := local_chat_text if is_local else opponent_chat_text
+	var sticker_view := local_chat_sticker if is_local else opponent_chat_sticker
+	var timer := local_chat_timer if is_local else opponent_chat_timer
+	var message := {
+		"player_index": player_index,
+		"kind": kind,
+		"text": text,
+		"sticker_id": sticker_id,
+	}
+	chat_history.append(message)
+	_update_chat_preview(message)
+	_append_chat_history_row(message)
+	_apply_chat_bubble_content(bubble, text_label, sticker_view, kind, text, sticker_id, _get_transient_chat_max_width())
+	bubble.visible = true
+	_layout_chat_bubbles()
+	timer.start(CHAT_MESSAGE_SECONDS)
+
+func _clear_chat_messages() -> void:
+	if chat_overlay != null:
+		chat_overlay.visible = false
+	_close_sticker_popup()
+	chat_history.clear()
+	if chat_preview_button != null:
+		chat_preview_label.text = "暂无消息，点击查看"
+		chat_preview_label.size = Vector2(214, 36)
+		chat_preview_sticker.visible = false
+	if chat_history_list != null:
+		for child in chat_history_list.get_children():
+			if child != chat_empty_label:
+				child.queue_free()
+		chat_empty_label.visible = true
+	if local_chat_timer != null:
+		local_chat_timer.stop()
+	if opponent_chat_timer != null:
+		opponent_chat_timer.stop()
+	if local_chat_bubble != null:
+		local_chat_bubble.visible = false
+	if opponent_chat_bubble != null:
+		opponent_chat_bubble.visible = false
+
+func _toggle_sticker_popup() -> void:
+	if local_mode or session == null or online_game_finished:
+		return
+	sticker_popup.visible = not sticker_popup.visible
+
+func _close_sticker_popup() -> void:
+	if sticker_popup != null:
+		sticker_popup.visible = false
+
+func _on_chat_shade_input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch and event.pressed:
+		_close_chat()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		_close_chat()
+
+func _update_chat_preview(message: Dictionary) -> void:
+	var sender := "你：" if int(message["player_index"]) == local_player_index else "对手："
+	if message["kind"] == Protocol.CHAT_KIND_TEXT:
+		chat_preview_label.text = sender + String(message["text"])
+		chat_preview_label.position = Vector2(12, 10)
+		chat_preview_label.size = Vector2(214, 36)
+		chat_preview_sticker.visible = false
+	else:
+		var sender_width := main_font.get_string_size(sender, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		chat_preview_label.text = sender
+		chat_preview_label.position = Vector2(12, 10)
+		chat_preview_label.size = Vector2(sender_width + 2.0, 36)
+		chat_preview_sticker.texture = sticker_textures[String(message["sticker_id"])]
+		chat_preview_sticker.position = Vector2(16.0 + sender_width, 12)
+		chat_preview_sticker.visible = true
+
+func _append_chat_history_row(message: Dictionary) -> void:
+	chat_empty_label.visible = false
+	var is_local := int(message["player_index"]) == local_player_index
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var bubble := _make_chat_bubble(is_local)
+	var text_label: Label = bubble.get_node("MessageText")
+	var sticker_view: TextureRect = bubble.get_node("Sticker")
+	_apply_chat_bubble_content(
+		bubble,
+		text_label,
+		sticker_view,
+		String(message["kind"]),
+		String(message["text"]),
+		String(message["sticker_id"]),
+		320.0
+	)
+	bubble.visible = true
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if is_local:
+		row.add_child(spacer)
+		row.add_child(bubble)
+	else:
+		row.add_child(bubble)
+		row.add_child(spacer)
+	chat_history_list.add_child(row)
+	_scroll_chat_to_bottom.call_deferred()
+
+func _apply_chat_bubble_content(bubble: Panel, text_label: Label, sticker_view: TextureRect, kind: String, text: String, sticker_id: String, max_text_width: float = 480.0) -> void:
+	bubble.custom_minimum_size = Vector2.ZERO
+	if kind == Protocol.CHAT_KIND_STICKER:
+		bubble.size = Vector2(120, 120)
+		bubble.custom_minimum_size = bubble.size
+		text_label.visible = false
+		sticker_view.texture = sticker_textures[sticker_id]
+		sticker_view.position = Vector2(12, 12)
+		sticker_view.size = Vector2(96, 96)
+		sticker_view.visible = true
+		return
+	var single_line := main_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 21)
+	var content_width := clampf(single_line.x, 36.0, max_text_width)
+	var multiline := main_font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, content_width, 21)
+	var content_height := maxf(multiline.y + 4.0, 28.0)
+	bubble.size = Vector2(content_width + 28.0, content_height + 20.0)
+	bubble.custom_minimum_size = bubble.size
+	text_label.text = text
+	text_label.position = Vector2(14, 10)
+	text_label.size = Vector2(content_width, content_height)
+	text_label.visible = true
+	sticker_view.visible = false
+
+func _get_transient_chat_max_width() -> float:
+	var viewport_width := get_viewport().get_visible_rect().size.x
+	if viewport_width >= 1120.0:
+		return 480.0
+	return clampf(viewport_width * 0.42 - 28.0, 220.0, 360.0)
+
+func _scroll_chat_to_bottom() -> void:
+	if chat_history_scroll == null:
+		return
+	await get_tree().process_frame
+	chat_history_scroll.scroll_vertical = int(chat_history_scroll.get_v_scroll_bar().max_value)
 
 func _toggle_rules() -> void:
 	if not game_hud.visible:
@@ -1293,6 +1792,50 @@ func _make_label(text: String, size: int, color: Color, alignment: HorizontalAli
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
 	return label
+
+func _make_white_chat_style(radius: int, shadow_color: Color, shadow_size: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(1, 1, 1, 0.97)
+	style.border_color = Color(0.82, 0.82, 0.82, 0.9)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	style.shadow_color = shadow_color
+	style.shadow_size = shadow_size
+	style.shadow_offset = Vector2(0, 2)
+	return style
+
+func _make_drawer_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("f2f2f2")
+	style.corner_radius_top_right = 20
+	style.corner_radius_bottom_right = 20
+	style.shadow_color = Color(0, 0, 0, 0.35)
+	style.shadow_size = 12
+	style.shadow_offset = Vector2(4, 0)
+	return style
+
+func _style_modern_chat_button(button: BaseButton, font_size: int) -> void:
+	button.add_theme_font_override("font", main_font)
+	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_color_override("font_color", INK)
+	button.add_theme_color_override("font_hover_color", Color("1f1f1f"))
+	button.add_theme_color_override("font_pressed_color", INK)
+	button.add_theme_color_override("font_disabled_color", Color(0.35, 0.35, 0.35, 0.55))
+	var normal := _make_white_chat_style(12, Color(0, 0, 0, 0.20), 4)
+	normal.content_margin_left = 12
+	normal.content_margin_right = 12
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color("f7f7f7")
+	hover.border_color = Color("b8b8b8")
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color("e9e9e9")
+	button.add_theme_stylebox_override("pressed", pressed)
+	button.add_theme_stylebox_override("focus", hover)
+	var disabled := normal.duplicate()
+	disabled.bg_color = Color(0.9, 0.9, 0.9, 0.72)
+	button.add_theme_stylebox_override("disabled", disabled)
 
 func _style_button(button: BaseButton, font_size: int) -> void:
 	button.add_theme_font_override("font", main_font)
