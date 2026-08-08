@@ -1,6 +1,7 @@
 extends SceneTree
 
 const UpdateManager = preload("res://scripts/update/update_manager.gd")
+const PREVIOUS_RELEASE_VERSION := "1.1.6"
 
 
 func _init() -> void:
@@ -10,7 +11,8 @@ func _init() -> void:
 func _run() -> void:
 	var request := HTTPRequest.new()
 	root.add_child(request)
-	var error := request.request(UpdateManager.PRIMARY_RELEASE_API, PackedStringArray(["User-Agent: MedievalDiceUpdateSmoke/1.1.5-test"]))
+	var expected_tag := "v%s" % ProjectSettings.get_setting("application/config/version")
+	var error := request.request(UpdateManager.PRIMARY_RELEASE_API, PackedStringArray(["User-Agent: MedievalDiceUpdateSmoke/%s" % PREVIOUS_RELEASE_VERSION]))
 	if error != OK:
 		_fail("could not start ECS update metadata request: %s" % error_string(error))
 		return
@@ -19,11 +21,11 @@ func _run() -> void:
 		_fail("ECS update metadata request failed: result=%s status=%s" % [response[0], response[1]])
 		return
 	var release = JSON.parse_string((response[3] as PackedByteArray).get_string_from_utf8())
-	if not release is Dictionary or str(release.get("tag_name", "")) != "v1.1.6":
-		_fail("ECS update metadata did not return v1.1.6")
+	if not release is Dictionary or str(release.get("tag_name", "")) != expected_tag:
+		_fail("ECS update metadata did not return %s" % expected_tag)
 		return
-	if not UpdateManager.is_remote_newer("1.1.5-test", str(release.get("tag_name", ""))):
-		_fail("v1.1.5-test did not detect v1.1.6 as newer")
+	if not UpdateManager.is_remote_newer(PREVIOUS_RELEASE_VERSION, str(release.get("tag_name", ""))):
+		_fail("v%s did not detect %s as newer" % [PREVIOUS_RELEASE_VERSION, expected_tag])
 		return
 	var android_url := UpdateManager.get_asset_url(release, "Android")
 	var windows_url := UpdateManager.get_asset_url(release, "Windows")
@@ -33,7 +35,7 @@ func _run() -> void:
 	if not UpdateManager.get_asset_fallback_url(release, "Android").begins_with("https://github.com/"):
 		_fail("ECS metadata did not include the GitHub fallback URL")
 		return
-	print("ECS update metadata and v1.1.5-test to v1.1.6 detection passed")
+	print("ECS update metadata and v%s to %s detection passed" % [PREVIOUS_RELEASE_VERSION, expected_tag])
 	quit(0)
 
 
