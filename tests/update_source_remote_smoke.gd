@@ -1,7 +1,7 @@
 extends SceneTree
 
 const UpdateManager = preload("res://scripts/update/update_manager.gd")
-const PREVIOUS_RELEASE_VERSION := "1.2.0"
+const PREVIOUS_RELEASE_VERSION := "1.2.1"
 
 
 func _init() -> void:

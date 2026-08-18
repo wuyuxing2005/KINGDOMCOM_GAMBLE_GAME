@@ -140,6 +140,20 @@ func _run() -> void:
 	await process_frame
 	_capture("res://build/chat-layout-20x9-smoke.png")
 
+	scene.local_chat_bubble.visible = true
+	scene.opponent_chat_bubble.visible = true
+	scene._on_game_finished(0)
+	await create_timer(0.8).timeout
+	await process_frame
+	var game_over_backdrop := scene.win_overlay.get_node("GameOverBackdrop") as ColorRect
+	if not scene.win_overlay.visible or scene.win_overlay.z_index <= scene.chat_overlay.z_index or scene.win_overlay.z_index <= scene.local_chat_bubble.z_index:
+		_fail("胜负界面没有显示在聊天抽屉和即时消息气泡上方")
+	if scene.win_overlay.mouse_filter != Control.MOUSE_FILTER_STOP:
+		_fail("胜负界面没有阻止下层页面操作")
+	if game_over_backdrop == null or not (game_over_backdrop.material is ShaderMaterial):
+		_fail("胜负界面没有使用灰暗模糊背景")
+	_capture("res://build/chat-game-over-overlay-smoke.png")
+
 	scene._start_network_game(_make_snapshot())
 	await process_frame
 	if not scene.chat_history.is_empty() or scene.chat_preview_label.text != "暂无消息，点击查看" or scene.chat_preview_sticker.visible:

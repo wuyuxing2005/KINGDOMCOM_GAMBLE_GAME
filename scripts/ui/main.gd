@@ -17,6 +17,18 @@ const AI_COLOR := Color("a13e2d")
 const INK := Color("37271b")
 const GOLD := Color("d9ad37")
 const CHAT_MESSAGE_SECONDS := 6.0
+const GAME_OVER_BACKDROP_SHADER := """
+shader_type canvas_item;
+
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear_mipmap;
+
+void fragment() {
+	vec4 screen_color = textureLod(screen_texture, SCREEN_UV, 2.5);
+	float grayscale = dot(screen_color.rgb, vec3(0.299, 0.587, 0.114));
+	vec3 muted_color = mix(screen_color.rgb, vec3(grayscale), 0.72);
+	COLOR = vec4(muted_color * 0.42, 1.0);
+}
+"""
 const CHAT_STICKER_PATHS := {
 	"smile": "res://assets/chat/stickers/smile.png",
 	"heart_eyes": "res://assets/chat/stickers/heart_eyes.png",
@@ -938,11 +950,20 @@ func _build_settings_overlay() -> void:
 func _build_win_overlay() -> void:
 	win_overlay = Control.new()
 	win_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	win_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	win_overlay.z_index = 100
 	win_overlay.visible = false
 	ui_root.add_child(win_overlay)
 	var shade := ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.74)
+	shade.name = "GameOverBackdrop"
+	shade.color = Color.WHITE
 	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	var backdrop_shader := Shader.new()
+	backdrop_shader.code = GAME_OVER_BACKDROP_SHADER
+	var backdrop_material := ShaderMaterial.new()
+	backdrop_material.shader = backdrop_shader
+	shade.material = backdrop_material
 	win_overlay.add_child(shade)
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
