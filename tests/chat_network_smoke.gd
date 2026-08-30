@@ -8,6 +8,7 @@ var host: NetworkClient
 var guest: NetworkClient
 var room_code := ""
 var ready_count := 0
+var dice_selection_started_count := 0
 var host_messages: Array[Dictionary] = []
 var guest_messages: Array[Dictionary] = []
 var host_errors: Array[String] = []
@@ -35,6 +36,8 @@ func _run() -> void:
 	host.room_assigned.connect(func(code: String, _index: int) -> void: room_code = code)
 	host.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
 	guest.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
+	host.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
+	guest.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
 	host.chat_received.connect(func(player_index: int, kind: String, text: String, sticker_id: String) -> void:
 		host_messages.append({"player_index": player_index, "kind": kind, "text": text, "sticker_id": sticker_id})
 	)
@@ -59,6 +62,12 @@ func _run() -> void:
 		_finish(server)
 		return
 	guest.join_room(room_code)
+	if not await _wait_until(func() -> bool: return dice_selection_started_count == 2):
+		_fail("双端未进入骰子选择阶段")
+		_finish(server)
+		return
+	host.confirm_dice_loadout(DiceCatalog.default_loadout())
+	guest.confirm_dice_loadout(DiceCatalog.default_loadout())
 	if not await _wait_until(func() -> bool: return ready_count == 2):
 		_fail("双端未进入对局")
 		_finish(server)

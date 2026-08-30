@@ -8,7 +8,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var main = current_scene
-	main._start_selected_game()
+	main._start_local_game(DiceCatalog.default_loadout())
 	await create_timer(2.4).timeout
 	var image := root.get_texture().get_image()
 	var error := image.save_png("res://build/visual-smoke.png")

@@ -8,11 +8,13 @@ signal connected
 signal disconnected
 signal room_assigned(room_code: String, player_index: int)
 signal room_ready(snapshot: GameSnapshot)
+signal dice_selection_started(is_rematch: bool)
+signal dice_selection_waiting
 signal rematch_waiting
 signal rematch_choose_target
 signal rematch_started(snapshot: GameSnapshot)
 signal snapshot_received(snapshot: GameSnapshot)
-signal rolled(values: Array[int])
+signal rolled(values: Array[int], dice_types: Array[String])
 signal busted(player_index: int)
 signal hot_dice(player_index: int)
 signal chat_received(player_index: int, kind: String, text: String, sticker_id: String)
@@ -50,6 +52,9 @@ func create_room(target_score: int) -> void:
 
 func join_room(room_code: String) -> void:
 	_send({"type": Protocol.JOIN_ROOM, "room_code": room_code.strip_edges().to_upper()})
+
+func confirm_dice_loadout(dice_loadout: Array) -> void:
+	_send({"type": Protocol.DICE_LOADOUT_CONFIRM, "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
 
 func send_action(action: GameAction) -> void:
 	_send({"type": Protocol.ACTION, "action": Protocol.action_to_dictionary(action)})
@@ -89,6 +94,10 @@ func _handle_message(message: Dictionary) -> void:
 			room_assigned.emit(String(message.get("room_code", "")), int(message.get("player_index", 0)))
 		Protocol.ROOM_READY:
 			room_ready.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
+		Protocol.DICE_SELECTION_STARTED:
+			dice_selection_started.emit(bool(message.get("is_rematch", false)))
+		Protocol.DICE_SELECTION_WAITING:
+			dice_selection_waiting.emit()
 		Protocol.REMATCH_WAITING:
 			rematch_waiting.emit()
 		Protocol.REMATCH_CHOOSE_TARGET:
@@ -98,7 +107,11 @@ func _handle_message(message: Dictionary) -> void:
 		Protocol.SNAPSHOT:
 			snapshot_received.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
 		Protocol.ROLLED:
-			rolled.emit(Protocol._int_array(message.get("values", [])))
+			var values := Protocol._int_array(message.get("values", []))
+			var dice_types := Protocol._string_array(message.get("dice_types", []))
+			if dice_types.size() != values.size():
+				dice_types.assign(Protocol._default_types(values.size()))
+			rolled.emit(values, dice_types)
 		Protocol.BUSTED:
 			busted.emit(int(message.get("player_index", -1)))
 		Protocol.HOT_DICE:

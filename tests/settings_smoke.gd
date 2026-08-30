@@ -12,7 +12,7 @@ func _run() -> void:
 		printerr("background music did not start in loop mode")
 		quit(1)
 		return
-	main._start_selected_game()
+	main._start_local_game(DiceCatalog.default_loadout())
 	await create_timer(0.1).timeout
 	var active_session = main.session
 	main._open_settings()

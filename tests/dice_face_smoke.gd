@@ -8,7 +8,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var main = current_scene
-	main._start_selected_game()
+	main._start_local_game(DiceCatalog.default_loadout())
 	await create_timer(2.4).timeout
 	var camera: Camera3D = main.find_children("*", "Camera3D", true, false)[0]
 	camera.look_at_from_position(Vector3(0, 12.0, 0.01), Vector3.ZERO, Vector3.BACK)
@@ -31,5 +31,16 @@ func _run() -> void:
 		printerr("dice face capture failed: %s" % error)
 		quit(1)
 		return
-	print("dice face capture saved")
+	var special_types := ["wild", "gambler", "sequence", "greed", "debt", "default"]
+	var special_values := [DiceCatalog.WILD_FACE, DiceCatalog.BLANK_FACE, 4, DiceCatalog.GREED_FACE, DiceCatalog.DEBT_FACE, 1]
+	for index in range(6):
+		main.die_views[index].set_dice_type(special_types[index])
+		main.die_views[index].set_value(special_values[index])
+	await process_frame
+	await process_frame
+	if root.get_texture().get_image().save_png("res://build/dice-special-faces.png") != OK:
+		printerr("special dice face capture failed")
+		quit(1)
+		return
+	print("normal and special dice face captures saved")
 	quit(0)

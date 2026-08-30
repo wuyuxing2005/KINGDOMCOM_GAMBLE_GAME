@@ -8,6 +8,9 @@ var host: NetworkClient
 var guest: NetworkClient
 var room_code := ""
 var ready_count := 0
+var dice_selection_started_count := 0
+var rematch_selection_started_count := 0
+var dice_waiting_count := 0
 var choose_target_count := 0
 var rematch_started_count := 0
 var host_waiting_count := 0
@@ -18,6 +21,10 @@ var guest_rematch_snapshot: GameSnapshot
 var guest_error := ""
 var host_opponent_left := false
 var failures := 0
+var host_loadout := ["wild", "wild", "default", "default", "default", "default"]
+var guest_loadout := ["debt", "sequence", "default", "default", "default", "default"]
+var host_rematch_loadout := ["greed", "greed", "default", "default", "default", "default"]
+var guest_rematch_loadout := ["gambler", "gambler", "wild", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -37,6 +44,15 @@ func _run() -> void:
 	host.room_assigned.connect(func(code: String, _index: int) -> void: room_code = code)
 	host.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
 	guest.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
+	host.dice_selection_started.connect(func(is_rematch: bool) -> void:
+		dice_selection_started_count += 1
+		rematch_selection_started_count += int(is_rematch)
+	)
+	guest.dice_selection_started.connect(func(is_rematch: bool) -> void:
+		dice_selection_started_count += 1
+		rematch_selection_started_count += int(is_rematch)
+	)
+	host.dice_selection_waiting.connect(func() -> void: dice_waiting_count += 1)
 	host.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: host_snapshot = snapshot)
 	guest.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: guest_snapshot = snapshot)
 	host.rematch_waiting.connect(func() -> void: host_waiting_count += 1)
@@ -69,6 +85,14 @@ func _run() -> void:
 		_finish()
 		return
 	guest.join_room(room_code)
+	if not await _wait_until(func() -> bool: return dice_selection_started_count == 2):
+		_fail("初始对局未进入双方骰子选择阶段")
+		_finish()
+		return
+	host.confirm_dice_loadout(host_loadout)
+	if not await _wait_until(func() -> bool: return dice_waiting_count == 1):
+		_fail("初始对局先确认者未等待对方")
+	guest.confirm_dice_loadout(guest_loadout)
 	if not await _wait_until(func() -> bool: return ready_count == 2 and host_snapshot != null and guest_snapshot != null):
 		_fail("初始对局未同步")
 		_finish()
@@ -94,12 +118,22 @@ func _run() -> void:
 	if server.rooms[room_code]["session"] != old_session:
 		_fail("房主确认目标前服务器提前开始了新局")
 	host.confirm_rematch(2500)
+	if not await _wait_until(func() -> bool: return rematch_selection_started_count == 2):
+		_fail("房主确认目标后双方未重新选择骰子")
+	if rematch_started_count != 0:
+		_fail("双方选择骰子前重赛提前开始")
+	host.confirm_dice_loadout(host_rematch_loadout)
+	if not await _wait_until(func() -> bool: return dice_waiting_count == 2):
+		_fail("重赛先确认者未等待对方")
+	guest.confirm_dice_loadout(guest_rematch_loadout)
 	if not await _wait_until(func() -> bool: return rematch_started_count == 2):
-		_fail("房主确认后双方未收到重赛开始消息")
+		_fail("双方确认骰子后未收到重赛开始消息")
 	if host_rematch_snapshot.target_score != 2500 or guest_rematch_snapshot.target_score != 2500:
 		_fail("新目标分数未同步")
 	if host_rematch_snapshot.scores != [0, 0] or guest_rematch_snapshot.scores != [0, 0]:
 		_fail("新局比分未清零")
+	if host_rematch_snapshot.player_dice_loadouts != [host_rematch_loadout, guest_rematch_loadout] or guest_rematch_snapshot.player_dice_loadouts != [host_rematch_loadout, guest_rematch_loadout]:
+		_fail("重赛未使用双方重新选择的骰子配置")
 	if host_rematch_snapshot.current_player not in [0, 1] or host_rematch_snapshot.current_player != guest_rematch_snapshot.current_player:
 		_fail("新局随机先手未同步")
 	if server.rooms[room_code]["session"] == old_session:
@@ -111,6 +145,10 @@ func _run() -> void:
 	if not await _wait_until(func() -> bool: return choose_target_count == 4):
 		_fail("第二次重赛未进入选分阶段")
 	host.confirm_rematch(6000)
+	if not await _wait_until(func() -> bool: return rematch_selection_started_count == 4):
+		_fail("连续重赛未重新进入骰子选择阶段")
+	host.confirm_dice_loadout(host_loadout)
+	guest.confirm_dice_loadout(guest_loadout)
 	if not await _wait_until(func() -> bool: return rematch_started_count == 4 and host_rematch_snapshot.target_score == 6000):
 		_fail("连续重赛未使用新的目标分数")
 
@@ -119,7 +157,7 @@ func _run() -> void:
 	if not await _wait_until(func() -> bool: return host_opponent_left):
 		_fail("结束界面退出未通知另一方")
 	if failures == 0:
-		print("PASS: 双方确认、房主选分、连续重赛与结束后退出通知测试通过")
+		print("PASS: 双方选骰等待、房主选分、重赛重新选骰与结束后退出通知测试通过")
 	_finish()
 
 func _force_game_over() -> void:

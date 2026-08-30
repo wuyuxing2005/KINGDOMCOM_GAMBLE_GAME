@@ -42,6 +42,32 @@ func _test_scoring() -> void:
 	_expect_eq(Rules.score_selection([5, 5]), 100, "two fives")
 	_expect_true(not Rules.has_score([2, 3, 4, 6]), "bust roll")
 	_expect_true(Rules.has_score([2, 2, 2]), "triple scores")
+	_expect_eq(Rules.score_selection([3, 3, DiceCatalog.WILD_FACE]), 300, "wild completes a triple")
+	_expect_eq(Rules.score_selection([1, 1, DiceCatalog.WILD_FACE]), 1000, "wild completes triple ones")
+	_expect_eq(Rules.score_selection([1, 2, 3, 4, DiceCatalog.WILD_FACE]), 500, "wild completes low straight")
+	_expect_eq(Rules.score_selection([2, 3, 4, 5, DiceCatalog.WILD_FACE]), 750, "wild chooses higher straight")
+	_expect_eq(Rules.score_selection([1, 2, 3, 4, 5, DiceCatalog.WILD_FACE]), 1500, "wild completes full straight")
+	_expect_eq(Rules.score_selection([1, 1, 2, 3, 4, DiceCatalog.WILD_FACE]), 600, "wild straight can combine with a normal scoring single")
+	_expect_eq(Rules.score_selection([4, 4, 4, DiceCatalog.WILD_FACE]), 800, "wild extends a triple to four of a kind")
+	_expect_eq(Rules.score_selection([DiceCatalog.WILD_FACE]), -1, "wild cannot score alone")
+	_expect_eq(Rules.score_selection([1, DiceCatalog.WILD_FACE]), -1, "wild cannot become a scoring single")
+	_expect_eq(Rules.score_selection([1, DiceCatalog.BLANK_FACE]), -1, "blank face invalidates a selection")
+	_expect_true(Rules.has_score([2, 2, DiceCatalog.WILD_FACE]), "wild creates a scoring subset")
+	_expect_true(not Rules.has_score([DiceCatalog.WILD_FACE, DiceCatalog.BLANK_FACE]), "wild and blank alone do not score")
+	var special_rolls := [
+		[DiceCatalog.WILD_FACE],
+		[2, 2, DiceCatalog.WILD_FACE],
+		[1, 2, 3, 4, DiceCatalog.WILD_FACE],
+		[DiceCatalog.WILD_FACE, DiceCatalog.WILD_FACE],
+		[6, DiceCatalog.WILD_FACE, DiceCatalog.WILD_FACE],
+		[1, DiceCatalog.GREED_FACE],
+		[5, DiceCatalog.DEBT_FACE],
+		[2, 3, DiceCatalog.BLANK_FACE, DiceCatalog.GREED_FACE],
+	]
+	for special_roll in special_rolls:
+		var typed_roll: Array[int] = []
+		typed_roll.assign(special_roll)
+		_expect_eq(Rules.has_score(typed_roll), not Rules.get_scoring_subsets(typed_roll).is_empty(), "special roll bust detection matches subsets: %s" % [special_roll])
 
 func _test_exhaustive_bust_consistency() -> void:
 	var mismatches := 0
@@ -90,6 +116,41 @@ func _test_session_flow() -> void:
 	_expect_eq(game.winner, 0, "first target reach wins")
 	_expect_eq(game.phase, Session.Phase.GAME_OVER, "game enters game over")
 
+	var greed_game = Session.new(4000, 1, [["greed", "default", "default", "default", "default", "default"]])
+	greed_game.phase = Session.Phase.AWAITING_SELECTION
+	greed_game.current_roll.assign([1, DiceCatalog.GREED_FACE])
+	greed_game.current_roll_types.assign(["default", "greed"])
+	greed_game.selected_indices.assign([0])
+	greed_game.must_roll_again = true
+	_expect_eq(greed_game.get_selected_score(), 200, "greed face doubles current selection")
+	greed_game.current_roll.assign([1, DiceCatalog.GREED_FACE, DiceCatalog.GREED_FACE])
+	_expect_eq(greed_game.get_selected_score(), 200, "multiple greed faces do not stack")
+	greed_game.current_roll.assign([1, DiceCatalog.GREED_FACE])
+	_expect_true(not greed_game.apply_action(Action.bank()), "greed face blocks banking")
+	greed_game.rng.seed = _seed_for_roll(["greed"], [1])
+	_expect_true(greed_game.apply_action(Action.roll_again()), "greed face allows required reroll")
+	_expect_eq(greed_game.turn_score, 200, "greed bonus is added before required reroll")
+	_expect_true(not greed_game.must_roll_again, "forced reroll clears when next roll has no greed face")
+
+	var debt_game = Session.new(4000, 1, [["debt", "default", "default", "default", "default", "default"]])
+	debt_game.scores[0] = 850
+	debt_game.turn_score = 850
+	debt_game.dice_to_roll = 2
+	debt_game.rng.seed = _seed_for_roll(["debt", "default"], [DiceCatalog.DEBT_FACE, 1])
+	_expect_true(debt_game.apply_action(Action.roll()), "debt effect roll accepted")
+	_expect_eq(debt_game.current_roll, [DiceCatalog.DEBT_FACE, 1], "debt test rolled expected faces")
+	_expect_eq(debt_game.scores[0], 850, "debt face does not change banked total score")
+	_expect_eq(debt_game.turn_score, 650, "debt face removes two hundred current turn points")
+
+	var debt_floor_game = Session.new(4000, 1, [["debt", "debt", "default", "default", "default", "default"]])
+	debt_floor_game.scores[0] = 400
+	debt_floor_game.turn_score = 300
+	debt_floor_game.dice_to_roll = 3
+	debt_floor_game.rng.seed = _seed_for_roll(["debt", "debt", "default"], [DiceCatalog.DEBT_FACE, DiceCatalog.DEBT_FACE, 1])
+	_expect_true(debt_floor_game.apply_action(Action.roll()), "multiple debt effect roll accepted")
+	_expect_eq(debt_floor_game.scores[0], 400, "multiple debt faces leave banked total score unchanged")
+	_expect_eq(debt_floor_game.turn_score, 0, "multiple debt faces cannot reduce current turn score below zero")
+
 func _test_ai() -> void:
 	var ai = AI.new()
 	var chosen := ai.choose_selection([1, 5, 2, 2, 3, 4])
@@ -110,3 +171,16 @@ func _expect_eq(actual, expected, label: String) -> void:
 
 func _expect_true(value: bool, label: String) -> void:
 	_expect_eq(value, true, label)
+
+func _seed_for_roll(types: Array[String], expected_values: Array[int]) -> int:
+	for candidate in range(100000):
+		var candidate_rng := RandomNumberGenerator.new()
+		candidate_rng.seed = candidate
+		var matches := true
+		for index in range(types.size()):
+			if DiceCatalog.roll_value(types[index], candidate_rng) != expected_values[index]:
+				matches = false
+				break
+		if matches:
+			return candidate
+	return -1

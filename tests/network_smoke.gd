@@ -8,11 +8,15 @@ var host: NetworkClient
 var guest: NetworkClient
 var room_code := ""
 var ready_count := 0
+var dice_selection_started_count := 0
+var host_dice_waiting_count := 0
 var host_snapshot: GameSnapshot
 var guest_snapshot: GameSnapshot
 var failures := 0
 var expected_starting_player := -1
 var actual_starting_player := -1
+var host_loadout := ["wild", "wild", "default", "default", "default", "default"]
+var guest_loadout := ["gambler", "sequence", "greed", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -42,6 +46,9 @@ func _run() -> void:
 	host.room_assigned.connect(func(code: String, _index: int) -> void: room_code = code)
 	host.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
 	guest.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
+	host.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
+	guest.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
+	host.dice_selection_waiting.connect(func() -> void: host_dice_waiting_count += 1)
 	host.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: host_snapshot = snapshot)
 	guest.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: guest_snapshot = snapshot)
 
@@ -61,8 +68,18 @@ func _run() -> void:
 		_finish(server)
 		return
 	guest.join_room(room_code)
+	if not await _wait_until(func() -> bool: return dice_selection_started_count == 2):
+		_fail("双端未进入骰子选择阶段")
+		_finish(server)
+		return
+	host.confirm_dice_loadout(host_loadout)
+	if not await _wait_until(func() -> bool: return host_dice_waiting_count == 1):
+		_fail("先确认者未进入等待状态")
+	if ready_count != 0:
+		_fail("单方确认时服务器提前开始对局")
+	guest.confirm_dice_loadout(guest_loadout)
 	if not await _wait_until(func() -> bool: return ready_count == 2):
-		_fail("双端未收到房间开始消息")
+		_fail("双方确认骰子后未收到房间开始消息")
 		_finish(server)
 		return
 	if not await _wait_until(func() -> bool: return host_snapshot != null and guest_snapshot != null and host_snapshot.phase == GameSession.Phase.AWAITING_SELECTION):
@@ -76,6 +93,11 @@ func _run() -> void:
 	actual_starting_player = host_snapshot.current_player
 	if host_snapshot.current_roll != guest_snapshot.current_roll:
 		_fail("双端骰子点数不一致")
+	if host_snapshot.player_dice_loadouts != [host_loadout, guest_loadout] or guest_snapshot.player_dice_loadouts != [host_loadout, guest_loadout]:
+		_fail("双方独立骰子配置未同步")
+	var expected_roll_types: Array = host_loadout if host_snapshot.current_player == 0 else guest_loadout
+	if host_snapshot.current_roll_types != expected_roll_types or guest_snapshot.current_roll_types != expected_roll_types:
+		_fail("首轮未使用先手玩家的骰子配置")
 	var subsets := ScoringRules.get_scoring_subsets(host_snapshot.current_roll)
 	if subsets.is_empty():
 		_fail("首轮快照意外为爆骰状态")

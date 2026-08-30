@@ -158,7 +158,7 @@ func _run() -> void:
 	await process_frame
 	if not scene.chat_history.is_empty() or scene.chat_preview_label.text != "暂无消息，点击查看" or scene.chat_preview_sticker.visible:
 		_fail("重赛开始后未清空当前局聊天历史")
-	scene._start_selected_game()
+	scene._start_local_game(DiceCatalog.default_loadout())
 	if scene.chat_entry.visible:
 		_fail("单人模式错误显示聊天入口")
 	if failures == 0:

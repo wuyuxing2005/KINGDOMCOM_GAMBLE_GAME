@@ -8,7 +8,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var main = current_scene
-	main._start_selected_game()
+	main._start_local_game(DiceCatalog.default_loadout())
 	main.session.rng.seed = 42
 	await create_timer(2.4).timeout
 	print("roll=%s phase=%s locked=%s" % [main.session.current_roll, main.session.phase, main.input_locked])
@@ -45,6 +45,12 @@ func _run() -> void:
 		return
 	if main.roll_again_button.disabled or main.bank_button.disabled:
 		printerr("scoring selection did not enable action buttons")
+		quit(1)
+		return
+	main.latest_snapshot.must_roll_again = true
+	main._update_buttons()
+	if main.roll_again_button.disabled or not main.bank_button.disabled:
+		printerr("greed forced reroll did not disable only the bank action")
 		quit(1)
 		return
 	print("multi-touch selection and scoring buttons passed")

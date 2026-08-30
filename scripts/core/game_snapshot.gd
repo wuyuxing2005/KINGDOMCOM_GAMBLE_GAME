@@ -7,9 +7,12 @@ var current_player: int = 0
 var turn_score: int = 0
 var selected_score: int = 0
 var current_roll: Array[int] = []
+var current_roll_types: Array[String] = []
 var held_dice: Array[int] = []
+var held_dice_types: Array[String] = []
+var player_dice_loadouts: Array = [DiceCatalog.default_loadout(), DiceCatalog.default_loadout()]
 var selected_indices: Array[int] = []
 var dice_to_roll: int = 6
+var must_roll_again: bool = false
 var phase: int = 0
 var winner: int = -1
-

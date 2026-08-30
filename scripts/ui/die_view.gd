@@ -6,27 +6,41 @@ const ACTIVE_SCALE := 0.74
 signal roll_finished(die_index: int)
 
 static var shared_die_mesh: ArrayMesh
-static var shared_ivory_material: StandardMaterial3D
-static var shared_pip_material: StandardMaterial3D
 
 var die_index := -1
+var dice_type := DiceCatalog.DEFAULT_ID
 var value := 1
 var base_position := Vector3.ZERO
 var is_selected := false
 var is_focused := false
 var model_root: Node3D
+var face_marks_root: Node3D
 var selection_ring: MeshInstance3D
 var ring_material: StandardMaterial3D
+var body_material: StandardMaterial3D
+var pip_material: StandardMaterial3D
 
 func _ready() -> void:
 	_build_visuals()
 
-func configure(index: int, _selectable: bool = true) -> void:
+func configure(index: int, _selectable: bool = true, type_id: String = DiceCatalog.DEFAULT_ID) -> void:
 	die_index = index
+	set_dice_type(type_id)
+
+func set_dice_type(type_id: String) -> void:
+	dice_type = type_id if DiceCatalog.is_valid_type(type_id) else DiceCatalog.DEFAULT_ID
+	if body_material == null or pip_material == null:
+		return
+	var definition := DiceCatalog.get_definition(dice_type)
+	body_material.albedo_color = definition["body_color"]
+	body_material.emission = definition["rim_color"]
+	body_material.emission_energy_multiplier = 0.05
+	pip_material.albedo_color = definition["pip_color"]
+	_rebuild_face_marks()
 
 func set_value(new_value: int) -> void:
-	value = clampi(new_value, 1, 6)
-	model_root.quaternion = _final_quaternion(value, 0.0)
+	value = new_value
+	model_root.quaternion = _final_quaternion(DiceCatalog.face_slot_for_value(dice_type, value), 0.0)
 
 func set_base_position(new_position: Vector3) -> void:
 	base_position = new_position
@@ -47,13 +61,13 @@ func set_selection(selected: bool, focused: bool = false) -> void:
 		position.y = target_y
 
 func animate_roll(new_value: int, target: Vector3, delay: float = 0.0) -> void:
-	value = clampi(new_value, 1, 6)
+	value = new_value
 	base_position = target
 	is_selected = false
 	is_focused = false
 	selection_ring.visible = false
 	var yaw := randf_range(-PI, PI)
-	var final_orientation := _final_quaternion(value, yaw)
+	var final_orientation := _final_quaternion(DiceCatalog.face_slot_for_value(dice_type, value), yaw)
 	var spin_angles := Vector3(
 		TAU * randf_range(1.7, 2.3),
 		TAU * randf_range(2.1, 2.8),
@@ -85,30 +99,29 @@ func animate_roll(new_value: int, target: Vector3, delay: float = 0.0) -> void:
 func _build_visuals() -> void:
 	if shared_die_mesh == null:
 		shared_die_mesh = _create_rounded_cube_mesh()
-		shared_ivory_material = StandardMaterial3D.new()
-		shared_ivory_material.albedo_color = Color("f1ddb0")
-		shared_ivory_material.roughness = 0.78
-		shared_ivory_material.metallic = 0.0
-		shared_pip_material = StandardMaterial3D.new()
-		shared_pip_material.albedo_color = Color("24170e")
-		shared_pip_material.roughness = 0.92
+	body_material = StandardMaterial3D.new()
+	body_material.roughness = 0.78
+	body_material.metallic = 0.0
+	body_material.emission_enabled = true
+	pip_material = StandardMaterial3D.new()
+	pip_material.roughness = 0.92
+	set_dice_type(dice_type)
 
 	model_root = Node3D.new()
 	model_root.name = "Model"
 	add_child(model_root)
 
 	var body := MeshInstance3D.new()
+	body.name = "Body"
 	body.mesh = shared_die_mesh
-	body.material_override = shared_ivory_material
+	body.material_override = body_material
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	model_root.add_child(body)
 
-	_add_face_pips(1, Vector3.UP, Vector3.RIGHT, Vector3.BACK)
-	_add_face_pips(6, Vector3.DOWN, Vector3.RIGHT, Vector3.FORWARD)
-	_add_face_pips(2, Vector3.BACK, Vector3.RIGHT, Vector3.UP)
-	_add_face_pips(5, Vector3.FORWARD, Vector3.LEFT, Vector3.UP)
-	_add_face_pips(3, Vector3.RIGHT, Vector3.FORWARD, Vector3.UP)
-	_add_face_pips(4, Vector3.LEFT, Vector3.BACK, Vector3.UP)
+	face_marks_root = Node3D.new()
+	face_marks_root.name = "FaceMarks"
+	model_root.add_child(face_marks_root)
+	_rebuild_face_marks()
 
 	selection_ring = MeshInstance3D.new()
 	var torus := TorusMesh.new()
@@ -127,6 +140,37 @@ func _build_visuals() -> void:
 	selection_ring.visible = false
 	add_child(selection_ring)
 
+func _rebuild_face_marks() -> void:
+	if face_marks_root == null:
+		return
+	for child in face_marks_root.get_children():
+		child.free()
+	var faces: Array = DiceCatalog.get_definition(dice_type)["faces"]
+	_add_face_mark(int(faces[0]), Vector3.UP, Vector3.RIGHT, Vector3.BACK)
+	_add_face_mark(int(faces[5]), Vector3.DOWN, Vector3.RIGHT, Vector3.FORWARD)
+	_add_face_mark(int(faces[1]), Vector3.BACK, Vector3.RIGHT, Vector3.UP)
+	_add_face_mark(int(faces[4]), Vector3.FORWARD, Vector3.LEFT, Vector3.UP)
+	_add_face_mark(int(faces[2]), Vector3.RIGHT, Vector3.FORWARD, Vector3.UP)
+	_add_face_mark(int(faces[3]), Vector3.LEFT, Vector3.BACK, Vector3.UP)
+
+func _add_face_mark(face_value: int, normal: Vector3, axis_u: Vector3, axis_v: Vector3) -> void:
+	if face_value >= 1 and face_value <= 6:
+		_add_face_pips(face_value, normal, axis_u, axis_v)
+	else:
+		_add_face_symbol(DiceCatalog.face_label(face_value), normal, axis_u, axis_v)
+
+func _add_face_symbol(symbol_text: String, normal: Vector3, axis_u: Vector3, axis_v: Vector3) -> void:
+	var symbol := Label3D.new()
+	symbol.text = symbol_text
+	symbol.font = load("res://assets/fonts/LXGWWenKai-Regular.ttf")
+	symbol.font_size = 64
+	symbol.pixel_size = 0.008
+	symbol.modulate = pip_material.albedo_color
+	symbol.outline_size = 0
+	symbol.position = normal * 0.566
+	symbol.basis = Basis(axis_u, -axis_v, normal)
+	face_marks_root.add_child(symbol)
+
 func _add_face_pips(face_value: int, normal: Vector3, axis_u: Vector3, axis_v: Vector3) -> void:
 	var patterns := {
 		1: [Vector2(0, 0)],
@@ -144,10 +188,10 @@ func _add_face_pips(face_value: int, normal: Vector3, axis_u: Vector3, axis_v: V
 		cylinder.height = 0.012
 		cylinder.radial_segments = 18
 		pip.mesh = cylinder
-		pip.material_override = shared_pip_material
+		pip.material_override = pip_material
 		pip.position = normal * 0.555 + axis_u * grid_position.x * 0.225 + axis_v * grid_position.y * 0.225
 		pip.quaternion = Quaternion(Vector3.UP, normal)
-		model_root.add_child(pip)
+		face_marks_root.add_child(pip)
 
 func _create_rounded_cube_mesh() -> ArrayMesh:
 	var surface := SurfaceTool.new()
