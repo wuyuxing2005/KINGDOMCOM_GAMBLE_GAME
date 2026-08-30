@@ -31,8 +31,7 @@ func _test_catalog() -> void:
 	for definition in DiceCatalog.DEFINITIONS:
 		_expect_true(not String(definition["name"]).is_empty(), "type has name")
 		_expect_true(not String(definition["odds"]).is_empty(), "type exposes odds")
-		_expect_true(String(definition["advantage"]).begins_with("优势："), "type exposes advantage")
-		_expect_true(String(definition["tradeoff"]).begins_with("代价："), "type exposes tradeoff")
+		_expect_true(not String(definition["description"]).is_empty(), "type exposes a concise description")
 		_expect_eq((definition["faces"] as Array).size(), 6, "type has six defined faces")
 	var normalized := DiceCatalog.normalize_loadout(["wild", "gambler"])
 	_expect_eq(normalized.size(), 6, "loadout fills to six")

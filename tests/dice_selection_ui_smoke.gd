@@ -37,8 +37,10 @@ func _run() -> void:
 			_fail("选择界面缺少骰子：%s" % definition["name"])
 		if not all_text.contains(String(definition["odds"])):
 			_fail("选择界面缺少概率：%s" % definition["name"])
-		if not all_text.contains(String(definition["advantage"])) or not all_text.contains(String(definition["tradeoff"])):
-			_fail("选择界面缺少利弊：%s" % definition["name"])
+		if not all_text.contains(String(definition["description"])):
+			_fail("选择界面缺少简介：%s" % definition["name"])
+	if all_text.contains("优势：") or all_text.contains("代价："):
+		_fail("选择界面不应再展示优势或代价标签")
 	scene._change_dice_count("wild", 1)
 	scene._change_dice_count("wild", 1)
 	scene._change_dice_count("greed", 1)
@@ -77,7 +79,7 @@ func _run() -> void:
 		root.get_texture().get_image().save_png("res://build/dice-types-game-smoke.png")
 	_test_die_styles(scene)
 	if failures == 0:
-		print("PASS: 开局前选骰、六枚上限、默认补齐、电脑随机选骰和差异外观测试通过")
+		print("PASS: 开局前选骰、简介展示、六枚上限、普通骰补齐和电脑随机选骰测试通过")
 	quit(1 if failures > 0 else 0)
 
 
