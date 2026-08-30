@@ -66,7 +66,7 @@ const DEFINITIONS := [
 		"name": "债务骰",
 		"faces": [1, 1, 5, 5, 6, DEBT_FACE],
 		"odds": "六面：1 / 1 / 5 / 5 / 6 / 💀",
-		"description": "1和5较多；每个💀使本轮累计分数减少200。",
+		"description": "1和5较多；每个💀使总分减少300。",
 		"body_color": Color("34383c"),
 		"pip_color": Color("e8dfd0"),
 		"rim_color": Color("747b80"),

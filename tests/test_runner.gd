@@ -130,12 +130,23 @@ func _test_session_flow() -> void:
 	_expect_true(not greed_game.must_roll_again, "forced reroll clears when next roll has no greed face")
 
 	var debt_game = Session.new(4000, 1, [["debt", "default", "default", "default", "default", "default"]])
-	debt_game.turn_score = 850
+	debt_game.scores[0] = 850
+	debt_game.turn_score = 250
 	debt_game.dice_to_roll = 2
 	debt_game.rng.seed = _seed_for_roll(["debt", "default"], [DiceCatalog.DEBT_FACE, 1])
 	_expect_true(debt_game.apply_action(Action.roll()), "debt effect roll accepted")
 	_expect_eq(debt_game.current_roll, [DiceCatalog.DEBT_FACE, 1], "debt test rolled expected faces")
-	_expect_eq(debt_game.turn_score, 650, "debt face removes two hundred accumulated points")
+	_expect_eq(debt_game.scores[0], 550, "debt face removes three hundred total points")
+	_expect_eq(debt_game.turn_score, 250, "debt face does not change current turn score")
+
+	var debt_floor_game = Session.new(4000, 1, [["debt", "debt", "default", "default", "default", "default"]])
+	debt_floor_game.scores[0] = 400
+	debt_floor_game.turn_score = 250
+	debt_floor_game.dice_to_roll = 3
+	debt_floor_game.rng.seed = _seed_for_roll(["debt", "debt", "default"], [DiceCatalog.DEBT_FACE, DiceCatalog.DEBT_FACE, 1])
+	_expect_true(debt_floor_game.apply_action(Action.roll()), "multiple debt effect roll accepted")
+	_expect_eq(debt_floor_game.scores[0], 0, "multiple debt faces cannot reduce total score below zero")
+	_expect_eq(debt_floor_game.turn_score, 250, "multiple debt faces leave current turn score unchanged")
 
 func _test_ai() -> void:
 	var ai = AI.new()
