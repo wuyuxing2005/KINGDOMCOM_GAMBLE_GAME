@@ -30,6 +30,8 @@ func _run() -> void:
 	if scene.session != null:
 		_fail("玩家确认骰子之前单人对局提前开始")
 	var all_text := _collect_text(scene.dice_selector_overlay)
+	if _has_exact_text(scene.dice_selector_overlay, "普通骰") or _has_exact_text(scene.dice_selector_overlay, "默认骰"):
+		_fail("选择列表不应展示普通骰子")
 	for definition in DiceCatalog.DEFINITIONS:
 		if not all_text.contains(String(definition["name"])):
 			_fail("选择界面缺少骰子：%s" % definition["name"])
@@ -37,22 +39,22 @@ func _run() -> void:
 			_fail("选择界面缺少概率：%s" % definition["name"])
 		if not all_text.contains(String(definition["advantage"])) or not all_text.contains(String(definition["tradeoff"])):
 			_fail("选择界面缺少利弊：%s" % definition["name"])
-	scene._change_dice_count("lucky", 1)
-	scene._change_dice_count("lucky", 1)
-	scene._change_dice_count("royal", 1)
+	scene._change_dice_count("wild", 1)
+	scene._change_dice_count("wild", 1)
+	scene._change_dice_count("greed", 1)
 	if scene._selected_dice_count() != 3:
 		_fail("选择计数不正确")
 	var configured: Array[String] = scene._selected_dice_loadout()
-	if configured.count("lucky") != 2 or configured.count("royal") != 1 or configured.count("default") != 3:
-		_fail("不足六枚时没有正确补默认骰")
-	if not scene.dice_selection_summary.text.contains("已选择 3/6") or not scene.dice_selection_summary.text.contains("默认骰×3"):
+	if configured.count("wild") != 2 or configured.count("greed") != 1 or configured.count("default") != 3:
+		_fail("不足六枚时没有正确补普通骰")
+	if not scene.dice_selection_summary.text.contains("已选择 3/6") or not scene.dice_selection_summary.text.contains("剩余 3 枚自动补为普通骰"):
 		_fail("配置摘要未同步")
 	for index in range(10):
-		scene._change_dice_count("iron", 1)
+		scene._change_dice_count("sequence", 1)
 	if scene._selected_dice_count() != 6:
 		_fail("骰子选择没有限制为六枚")
 	# Restore the intended three selected dice for the game-start assertion.
-	scene.dice_selection_counts["iron"] = 0
+	scene.dice_selection_counts["sequence"] = 0
 	scene._update_dice_selector_summary()
 	if DisplayServer.get_name() != "headless":
 		await process_frame
@@ -105,6 +107,15 @@ func _collect_text(node: Node) -> String:
 	for child in node.get_children():
 		text += _collect_text(child)
 	return text
+
+
+func _has_exact_text(node: Node, expected: String) -> bool:
+	if (node is Label or node is Button) and String(node.text) == expected:
+		return true
+	for child in node.get_children():
+		if _has_exact_text(child, expected):
+			return true
+	return false
 
 
 func _fail(message: String) -> void:

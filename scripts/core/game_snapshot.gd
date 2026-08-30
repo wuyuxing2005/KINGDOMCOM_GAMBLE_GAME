@@ -13,5 +13,6 @@ var held_dice_types: Array[String] = []
 var player_dice_loadouts: Array = [DiceCatalog.default_loadout(), DiceCatalog.default_loadout()]
 var selected_indices: Array[int] = []
 var dice_to_roll: int = 6
+var must_roll_again: bool = false
 var phase: int = 0
 var winner: int = -1

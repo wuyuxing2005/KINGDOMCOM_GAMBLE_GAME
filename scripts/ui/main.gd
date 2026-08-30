@@ -572,7 +572,10 @@ func _dice_loadout_description() -> String:
 func _update_dice_selector_summary() -> void:
 	var selected := _selected_dice_count()
 	if dice_selection_summary != null:
-		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为默认骰　｜　%s" % [selected, 6 - selected, _dice_loadout_description()]
+		var special_description := _dice_loadout_description()
+		if special_description.is_empty():
+			special_description = "尚未选择特殊骰"
+		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为普通骰　｜　%s" % [selected, 6 - selected, special_description]
 	for type_id in dice_count_labels:
 		(dice_count_labels[type_id] as Label).text = str(dice_selection_counts[type_id])
 func _setup_update_manager() -> void:
@@ -1592,9 +1595,9 @@ func _on_state_changed(snapshot: GameSnapshot) -> void:
 	_update_buttons()
 	if snapshot.current_player == local_player_index and snapshot.phase == Session.Phase.AWAITING_SELECTION and not input_locked:
 		if snapshot.selected_indices.is_empty():
-			status_label.text = "选择得分骰"
+			status_label.text = "贪婪面出现：选择得分骰后必须继续投掷" if snapshot.must_roll_again else "选择得分骰"
 		elif snapshot.selected_score > 0:
-			status_label.text = "当前选择可得 %d 分" % snapshot.selected_score
+			status_label.text = ("贪婪加成后可得 %d 分，必须继续投掷" if snapshot.must_roll_again else "当前选择可得 %d 分") % snapshot.selected_score
 		else:
 			status_label.text = "当前组合暂不能计分，请继续选择"
 	elif not local_mode and snapshot.phase == Session.Phase.AWAITING_SELECTION and rolling_count == 0:
@@ -1637,7 +1640,7 @@ func _on_die_roll_finished(_index: int) -> void:
 		_run_ai_turn(game_generation)
 	elif session != null and session.current_player == local_player_index:
 		input_locked = false
-		status_label.text = "选择得分骰"
+		status_label.text = "贪婪面出现：选择得分骰后必须继续投掷" if session.must_roll_again else "选择得分骰"
 		focused_die = clampi(focused_die, 0, maxi(0, die_views.size() - 1))
 		_update_die_selection()
 		_update_buttons()
@@ -1666,7 +1669,11 @@ func _run_ai_turn(generation: int) -> void:
 		return
 	var projected: int = session.turn_score + session.get_selected_score()
 	var remaining: int = session.current_roll.size() - session.selected_indices.size()
-	if ai_controller.should_bank(projected, remaining, session.scores, session.target_score):
+	if session.must_roll_again:
+		status_label.text = "电脑触发贪婪面，必须继续投掷"
+		input_locked = true
+		session.apply_action(Action.roll_again())
+	elif ai_controller.should_bank(projected, remaining, session.scores, session.target_score):
 		status_label.text = "电脑停手得分"
 		input_locked = true
 		if session.apply_action(Action.bank()) and session.phase != Session.Phase.GAME_OVER:
@@ -1756,7 +1763,7 @@ func _request_roll_again() -> void:
 	human_controller.roll_again()
 
 func _request_bank() -> void:
-	if not _can_human_act() or latest_snapshot.selected_score <= 0:
+	if not _can_human_act() or latest_snapshot.selected_score <= 0 or latest_snapshot.must_roll_again:
 		return
 	input_locked = true
 	human_controller.bank()
@@ -1787,7 +1794,7 @@ func _update_held_dice(values: Array[int], dice_types: Array[String] = []) -> vo
 func _update_buttons() -> void:
 	var enabled := _can_human_act() and latest_snapshot != null and latest_snapshot.selected_score > 0
 	roll_again_button.disabled = not enabled
-	bank_button.disabled = not enabled
+	bank_button.disabled = not enabled or (latest_snapshot != null and latest_snapshot.must_roll_again)
 	var chat_disabled := local_mode or online_game_finished or session == null
 	chat_preview_button.disabled = chat_disabled
 	quick_sticker_button.disabled = chat_disabled

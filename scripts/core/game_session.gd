@@ -26,6 +26,7 @@ var player_dice_loadouts: Array = [DiceCatalog.default_loadout(), DiceCatalog.de
 var next_roll_types: Array[String] = []
 var selected_indices: Array[int] = []
 var dice_to_roll := 6
+var must_roll_again := false
 var phase := Phase.AWAITING_ROLL
 var winner := -1
 var rng := RandomNumberGenerator.new()
@@ -72,7 +73,10 @@ func get_selected_values() -> Array[int]:
 	return values
 
 func get_selected_score() -> int:
-	return ScoringRules.score_selection(get_selected_values())
+	var base_score := ScoringRules.score_selection(get_selected_values())
+	if base_score > 0 and current_roll.has(DiceCatalog.GREED_FACE):
+		return base_score * 3 / 2
+	return base_score
 
 func get_snapshot() -> GameSnapshot:
 	var snapshot := GameSnapshot.new()
@@ -88,6 +92,7 @@ func get_snapshot() -> GameSnapshot:
 	snapshot.player_dice_loadouts = [player_dice_loadouts[0].duplicate(), player_dice_loadouts[1].duplicate()]
 	snapshot.selected_indices = selected_indices.duplicate()
 	snapshot.dice_to_roll = dice_to_roll
+	snapshot.must_roll_again = must_roll_again
 	snapshot.phase = phase
 	snapshot.winner = winner
 	return snapshot
@@ -107,10 +112,15 @@ func _apply_roll() -> bool:
 		next_roll_types.clear()
 	for type_id in current_roll_types:
 		current_roll.append(DiceCatalog.roll_value(type_id, rng))
+	var debt_faces := current_roll.count(DiceCatalog.DEBT_FACE)
+	if debt_faces > 0:
+		turn_score = maxi(0, turn_score - debt_faces * 200)
+	must_roll_again = current_roll.has(DiceCatalog.GREED_FACE)
 	phase = Phase.AWAITING_SELECTION
 	rolled.emit(current_roll.duplicate(), current_roll_types.duplicate())
 	if not ScoringRules.has_score(current_roll):
 		turn_score = 0
+		must_roll_again = false
 		phase = Phase.BUSTED
 		busted.emit(current_player)
 	_emit_state()
@@ -162,7 +172,7 @@ func _apply_roll_again() -> bool:
 	return _apply_roll()
 
 func _apply_bank() -> bool:
-	if phase != Phase.AWAITING_SELECTION:
+	if phase != Phase.AWAITING_SELECTION or must_roll_again:
 		return false
 	var selection_score := get_selected_score()
 	if selection_score <= 0:
@@ -192,6 +202,7 @@ func _end_turn() -> void:
 	next_roll_types.clear()
 	selected_indices.clear()
 	dice_to_roll = 6
+	must_roll_again = false
 	phase = Phase.AWAITING_ROLL
 	_emit_state()
 

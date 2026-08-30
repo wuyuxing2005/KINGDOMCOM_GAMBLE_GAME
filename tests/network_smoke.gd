@@ -15,8 +15,8 @@ var guest_snapshot: GameSnapshot
 var failures := 0
 var expected_starting_player := -1
 var actual_starting_player := -1
-var host_loadout := ["lucky", "lucky", "default", "default", "default", "default"]
-var guest_loadout := ["iron", "royal", "reckless", "default", "default", "default"]
+var host_loadout := ["wild", "wild", "default", "default", "default", "default"]
+var guest_loadout := ["gambler", "sequence", "greed", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()

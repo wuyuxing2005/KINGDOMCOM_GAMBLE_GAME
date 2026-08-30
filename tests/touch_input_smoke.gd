@@ -47,5 +47,11 @@ func _run() -> void:
 		printerr("scoring selection did not enable action buttons")
 		quit(1)
 		return
+	main.latest_snapshot.must_roll_again = true
+	main._update_buttons()
+	if main.roll_again_button.disabled or not main.bank_button.disabled:
+		printerr("greed forced reroll did not disable only the bank action")
+		quit(1)
+		return
 	print("multi-touch selection and scoring buttons passed")
 	quit(0)

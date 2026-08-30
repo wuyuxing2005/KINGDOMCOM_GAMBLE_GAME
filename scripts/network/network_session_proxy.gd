@@ -12,6 +12,7 @@ var held_dice_types: Array[String] = []
 var player_dice_loadouts: Array = [DiceCatalog.default_loadout(), DiceCatalog.default_loadout()]
 var selected_indices: Array[int] = []
 var dice_to_roll := 6
+var must_roll_again := false
 var phase := GameSession.Phase.AWAITING_ROLL
 var winner := -1
 
@@ -34,6 +35,7 @@ func apply_snapshot(snapshot: GameSnapshot) -> void:
 	]
 	selected_indices = snapshot.selected_indices.duplicate()
 	dice_to_roll = snapshot.dice_to_roll
+	must_roll_again = snapshot.must_roll_again
 	phase = snapshot.phase
 	winner = snapshot.winner
 
@@ -42,7 +44,10 @@ func get_selected_score() -> int:
 	for index in selected_indices:
 		if index >= 0 and index < current_roll.size():
 			values.append(current_roll[index])
-	return ScoringRules.score_selection(values)
+	var base_score := ScoringRules.score_selection(values)
+	if base_score > 0 and current_roll.has(DiceCatalog.GREED_FACE):
+		return base_score * 3 / 2
+	return base_score
 
 func _default_types(count: int) -> Array[String]:
 	var result: Array[String] = []

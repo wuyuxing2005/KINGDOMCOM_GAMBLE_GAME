@@ -55,6 +55,7 @@ static func snapshot_to_dictionary(snapshot: GameSnapshot) -> Dictionary:
 		"player_dice_loadouts": [snapshot.player_dice_loadouts[0].duplicate(), snapshot.player_dice_loadouts[1].duplicate()] if snapshot.player_dice_loadouts.size() >= 2 else [DiceCatalog.default_loadout(), DiceCatalog.default_loadout()],
 		"selected_indices": snapshot.selected_indices.duplicate(),
 		"dice_to_roll": snapshot.dice_to_roll,
+		"must_roll_again": snapshot.must_roll_again,
 		"phase": snapshot.phase,
 		"winner": snapshot.winner,
 	}
@@ -81,6 +82,7 @@ static func snapshot_from_dictionary(data: Dictionary) -> GameSnapshot:
 	]
 	snapshot.selected_indices = _int_array(data.get("selected_indices", []))
 	snapshot.dice_to_roll = int(data.get("dice_to_roll", 6))
+	snapshot.must_roll_again = bool(data.get("must_roll_again", false))
 	snapshot.phase = int(data.get("phase", 0))
 	snapshot.winner = int(data.get("winner", -1))
 	return snapshot

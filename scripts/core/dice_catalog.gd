@@ -4,61 +4,77 @@ extends RefCounted
 const DEFAULT_ID := "default"
 const MAX_DICE := 6
 
+const WILD_FACE := 7
+const BLANK_FACE := 8
+const GREED_FACE := 9
+const DEBT_FACE := 10
+
+const DEFAULT_DEFINITION := {
+	"id": DEFAULT_ID,
+	"name": "普通骰",
+	"faces": [1, 2, 3, 4, 5, 6],
+	"body_color": Color("ead7aa"),
+	"pip_color": Color("3b2118"),
+	"rim_color": Color("fff1bd"),
+}
+
+# Only special dice belong here. The selection screen iterates this list, while
+# unfilled loadout slots are still normalized to the hidden ordinary die.
 const DEFINITIONS := [
 	{
-		"id": DEFAULT_ID,
-		"name": "默认骰",
-		"weights": [1, 1, 1, 1, 1, 1],
-		"odds": "1–6点：各16.7%",
-		"advantage": "优势：分布均衡，顺子与各种组合都较稳定。",
-		"tradeoff": "代价：没有特别容易出现的得分点数。",
-		"body_color": Color("ead7aa"),
-		"pip_color": Color("3b2118"),
-		"rim_color": Color("fff1bd"),
+		"id": "wild",
+		"name": "万能骰",
+		"faces": [2, 3, 4, 5, 6, WILD_FACE],
+		"odds": "六面：2 / 3 / 4 / 5 / 6 / ★",
+		"advantage": "优势：★可补三条、多连或顺子，修正差一个点数的组合。",
+		"tradeoff": "代价：没有1面，★不能单独作为1或5计分。",
+		"body_color": Color("7657a6"),
+		"pip_color": Color("f8e9ff"),
+		"rim_color": Color("c4a6f0"),
 	},
 	{
-		"id": "lucky",
-		"name": "幸运骰",
-		"weights": [18, 16, 16, 16, 18, 16],
-		"odds": "1:18%  2:16%  3:16%  4:16%  5:18%  6:16%",
-		"advantage": "优势：1和5更常见，容易取得可保留的得分骰。",
-		"tradeoff": "代价：顺子及2、3、4、6的多骰组合更难形成。",
-		"body_color": Color("d6a83f"),
-		"pip_color": Color("5a2d12"),
-		"rim_color": Color("ffe39a"),
+		"id": "gambler",
+		"name": "赌徒骰",
+		"faces": [1, 1, 5, 5, BLANK_FACE, BLANK_FACE],
+		"odds": "六面：1 / 1 / 5 / 5 / X / X",
+		"advantage": "优势：66.7%出现可单独得分的1或5，单骰保命能力强。",
+		"tradeoff": "代价：X没有任何价值，大型组合与顺子能力较弱。",
+		"body_color": Color("b5453d"),
+		"pip_color": Color("fff0d2"),
+		"rim_color": Color("ef8b70"),
 	},
 	{
-		"id": "iron",
-		"name": "铁卫骰",
-		"weights": [8, 12, 30, 30, 12, 8],
-		"odds": "1:8%  2:12%  3:30%  4:30%  5:12%  6:8%",
-		"advantage": "优势：3和4集中，较容易凑出三连。",
-		"tradeoff": "代价：单独得分的1和5较少，爆骰风险更高。",
-		"body_color": Color("9e4d3c"),
-		"pip_color": Color("f2dfbf"),
-		"rim_color": Color("d98668"),
+		"id": "sequence",
+		"name": "连号骰",
+		"faces": [2, 3, 3, 4, 4, 5],
+		"odds": "六面：2 / 3 / 3 / 4 / 4 / 5",
+		"advantage": "优势：容易累积3和4，也适合补齐两种小顺子。",
+		"tradeoff": "代价：没有1和6，仅一个5可单独计分，少骰时危险。",
+		"body_color": Color("3f7892"),
+		"pip_color": Color("e7f7f5"),
+		"rim_color": Color("7fc5cc"),
 	},
 	{
-		"id": "royal",
-		"name": "王权骰",
-		"weights": [6, 18, 18, 18, 10, 30],
-		"odds": "1:6%  2:18%  3:18%  4:18%  5:10%  6:30%",
-		"advantage": "优势：极易累积6，六点多连拥有很高上限。",
-		"tradeoff": "代价：单个6不得分，未成三连时容易爆骰。",
-		"body_color": Color("354f82"),
-		"pip_color": Color("f4c95d"),
-		"rim_color": Color("718dc3"),
+		"id": "greed",
+		"name": "贪婪骰",
+		"faces": [1, 3, 4, 5, 6, GREED_FACE],
+		"odds": "六面：1 / 3 / 4 / 5 / 6 / 💰",
+		"advantage": "优势：💰令本次选中组合得分提高50%。",
+		"tradeoff": "代价：出现💰后不能停手，必须至少继续投掷一次。",
+		"body_color": Color("b88a25"),
+		"pip_color": Color("3e2910"),
+		"rim_color": Color("f3cf61"),
 	},
 	{
-		"id": "reckless",
-		"name": "孤注骰",
-		"weights": [18, 17, 17, 17, 8, 23],
-		"odds": "1:18%  2:17%  3:17%  4:17%  5:8%  6:23%",
-		"advantage": "优势：1和6略多，兼顾稳定单分与高分六点多连。",
-		"tradeoff": "代价：5很少，未形成六点多连时爆骰风险更高。",
-		"body_color": Color("31483a"),
-		"pip_color": Color("e86b4f"),
-		"rim_color": Color("738a74"),
+		"id": "debt",
+		"name": "债务骰",
+		"faces": [1, 1, 5, 5, 6, DEBT_FACE],
+		"odds": "六面：1 / 1 / 5 / 5 / 6 / 💀",
+		"advantage": "优势：四个面可单独得分，前期稳定取得小分。",
+		"tradeoff": "代价：每个💀令本轮已累计分数减少200，最低降至0。",
+		"body_color": Color("34383c"),
+		"pip_color": Color("e8dfd0"),
+		"rim_color": Color("747b80"),
 	},
 ]
 
@@ -71,14 +87,16 @@ static func get_ids() -> Array[String]:
 
 
 static func get_definition(type_id: String) -> Dictionary:
+	if type_id == DEFAULT_ID:
+		return DEFAULT_DEFINITION.duplicate(true)
 	for definition in DEFINITIONS:
 		if String(definition["id"]) == type_id:
 			return definition.duplicate(true)
-	return DEFINITIONS[0].duplicate(true)
+	return DEFAULT_DEFINITION.duplicate(true)
 
 
 static func is_valid_type(type_id: String) -> bool:
-	return get_ids().has(type_id)
+	return type_id == DEFAULT_ID or get_ids().has(type_id)
 
 
 static func normalize_loadout(values: Array) -> Array[String]:
@@ -107,15 +125,24 @@ static func random_loadout(rng: RandomNumberGenerator) -> Array[String]:
 
 
 static func roll_value(type_id: String, rng: RandomNumberGenerator) -> int:
-	var definition := get_definition(type_id)
-	var weights: Array = definition["weights"]
-	var total := 0
-	for weight in weights:
-		total += int(weight)
-	var result := rng.randi_range(1, total)
-	var accumulated := 0
-	for index in range(weights.size()):
-		accumulated += int(weights[index])
-		if result <= accumulated:
-			return index + 1
-	return 6
+	var faces: Array = get_definition(type_id)["faces"]
+	return int(faces[rng.randi_range(0, faces.size() - 1)])
+
+
+static func face_slot_for_value(type_id: String, value: int) -> int:
+	var faces: Array = get_definition(type_id)["faces"]
+	var index := faces.find(value)
+	return index + 1 if index >= 0 else 1
+
+
+static func face_label(value: int) -> String:
+	match value:
+		WILD_FACE:
+			return "★"
+		BLANK_FACE:
+			return "X"
+		GREED_FACE:
+			return "$"
+		DEBT_FACE:
+			return "☠"
+	return str(value)

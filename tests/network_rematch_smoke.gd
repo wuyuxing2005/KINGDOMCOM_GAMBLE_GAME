@@ -21,10 +21,10 @@ var guest_rematch_snapshot: GameSnapshot
 var guest_error := ""
 var host_opponent_left := false
 var failures := 0
-var host_loadout := ["lucky", "lucky", "default", "default", "default", "default"]
-var guest_loadout := ["royal", "iron", "default", "default", "default", "default"]
-var host_rematch_loadout := ["reckless", "reckless", "default", "default", "default", "default"]
-var guest_rematch_loadout := ["iron", "iron", "lucky", "default", "default", "default"]
+var host_loadout := ["wild", "wild", "default", "default", "default", "default"]
+var guest_loadout := ["debt", "sequence", "default", "default", "default", "default"]
+var host_rematch_loadout := ["greed", "greed", "default", "default", "default", "default"]
+var guest_rematch_loadout := ["gambler", "gambler", "wild", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()
