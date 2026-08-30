@@ -70,6 +70,11 @@ var ui_root: Control
 var menu_screen: Control
 var game_hud: Control
 var target_option: OptionButton
+var dice_loadout_button: Button
+var dice_selector_overlay: Control
+var dice_selection_summary: Label
+var dice_selection_counts: Dictionary = {}
+var dice_count_labels: Dictionary = {}
 var player_title_label: Label
 var opponent_title_label: Label
 var player_score_label: Label
@@ -194,7 +199,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("back_to_menu"):
-		if chat_overlay.visible:
+		if dice_selector_overlay != null and dice_selector_overlay.visible:
+			_close_dice_selector()
+		elif chat_overlay.visible:
 			_close_chat()
 		elif sticker_popup.visible:
 			_close_sticker_popup()
@@ -301,6 +308,7 @@ func _build_ui() -> void:
 	canvas.add_child(ui_root)
 
 	_build_menu()
+	_build_dice_selector_overlay()
 	_build_game_hud()
 	_build_chat_overlay()
 	_build_rules_overlay()
@@ -339,14 +347,14 @@ func _build_menu() -> void:
 
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-285, -300)
-	panel.size = Vector2(570, 600)
+	panel.position = Vector2(-285, -330)
+	panel.size = Vector2(570, 660)
 	menu_screen.add_child(panel)
 
 	var content := VBoxContainer.new()
 	content.position = Vector2(76, 48)
-	content.size = Vector2(418, 505)
-	content.add_theme_constant_override("separation", 11)
+	content.size = Vector2(418, 565)
+	content.add_theme_constant_override("separation", 8)
 	panel.add_child(content)
 
 	var title := _make_label("中世纪骰局", 48, INK, HORIZONTAL_ALIGNMENT_CENTER)
@@ -362,6 +370,12 @@ func _build_menu() -> void:
 	_style_button(target_option, 24)
 	target_option.custom_minimum_size = Vector2(0, 58)
 	content.add_child(target_option)
+	dice_loadout_button = Button.new()
+	dice_loadout_button.custom_minimum_size.y = 54
+	_style_button(dice_loadout_button, 21)
+	dice_loadout_button.pressed.connect(_open_dice_selector)
+	content.add_child(dice_loadout_button)
+	_update_dice_loadout_button()
 	var start_button := Button.new()
 	start_button.text = "单人对电脑"
 	start_button.custom_minimum_size.y = 62
@@ -386,6 +400,150 @@ func _build_menu() -> void:
 	_style_button(exit_button, 22)
 	exit_button.pressed.connect(func() -> void: get_tree().quit())
 	content.add_child(exit_button)
+
+func _build_dice_selector_overlay() -> void:
+	dice_selector_overlay = Control.new()
+	dice_selector_overlay.name = "DiceSelectorOverlay"
+	dice_selector_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dice_selector_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	dice_selector_overlay.visible = false
+	ui_root.add_child(dice_selector_overlay)
+	var shade := ColorRect.new()
+	shade.color = Color(0.015, 0.008, 0.003, 0.82)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dice_selector_overlay.add_child(shade)
+	var panel := _make_parchment_panel()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.position = Vector2(-550, -330)
+	panel.size = Vector2(1100, 660)
+	dice_selector_overlay.add_child(panel)
+	var title := _make_label("配置你的六枚骰子", 36, INK, HORIZONTAL_ALIGNMENT_CENTER)
+	title.position = Vector2(70, 24)
+	title.size = Vector2(960, 48)
+	panel.add_child(title)
+	dice_selection_summary = _make_label("", 19, Color("725037"), HORIZONTAL_ALIGNMENT_CENTER)
+	dice_selection_summary.position = Vector2(70, 72)
+	dice_selection_summary.size = Vector2(960, 34)
+	panel.add_child(dice_selection_summary)
+	var row_y := 110.0
+	for definition in DiceCatalog.DEFINITIONS:
+		var type_id := String(definition["id"])
+		dice_selection_counts[type_id] = 0
+		var row := Panel.new()
+		row.position = Vector2(48, row_y)
+		row.size = Vector2(1004, 92)
+		var row_style := StyleBoxFlat.new()
+		row_style.bg_color = Color(1.0, 0.93, 0.75, 0.52)
+		row_style.border_color = definition["body_color"]
+		row_style.set_border_width_all(2)
+		row_style.set_corner_radius_all(10)
+		row.add_theme_stylebox_override("panel", row_style)
+		panel.add_child(row)
+		var swatch := Panel.new()
+		swatch.position = Vector2(16, 18)
+		swatch.size = Vector2(54, 54)
+		var swatch_style := StyleBoxFlat.new()
+		swatch_style.bg_color = definition["body_color"]
+		swatch_style.border_color = definition["pip_color"]
+		swatch_style.set_border_width_all(4)
+		swatch_style.set_corner_radius_all(10)
+		swatch.add_theme_stylebox_override("panel", swatch_style)
+		row.add_child(swatch)
+		var name_label := _make_label(String(definition["name"]), 23, INK)
+		name_label.position = Vector2(84, 8)
+		name_label.size = Vector2(130, 34)
+		row.add_child(name_label)
+		var odds_label := _make_label(String(definition["odds"]), 17, Color("5b3a29"))
+		odds_label.position = Vector2(218, 5)
+		odds_label.size = Vector2(600, 28)
+		row.add_child(odds_label)
+		var advantage_label := _make_label(String(definition["advantage"]), 16, Color("356044"))
+		advantage_label.position = Vector2(84, 37)
+		advantage_label.size = Vector2(720, 24)
+		row.add_child(advantage_label)
+		var tradeoff_label := _make_label(String(definition["tradeoff"]), 16, Color("8e2d22"))
+		tradeoff_label.position = Vector2(84, 62)
+		tradeoff_label.size = Vector2(720, 24)
+		row.add_child(tradeoff_label)
+		var minus := Button.new()
+		minus.text = "−"
+		minus.position = Vector2(824, 20)
+		minus.size = Vector2(48, 52)
+		_style_button(minus, 25)
+		minus.pressed.connect(_change_dice_count.bind(type_id, -1))
+		row.add_child(minus)
+		var count_label := _make_label("0", 25, INK, HORIZONTAL_ALIGNMENT_CENTER)
+		count_label.position = Vector2(878, 20)
+		count_label.size = Vector2(54, 52)
+		row.add_child(count_label)
+		dice_count_labels[type_id] = count_label
+		var plus := Button.new()
+		plus.text = "+"
+		plus.position = Vector2(938, 20)
+		plus.size = Vector2(48, 52)
+		_style_button(plus, 25)
+		plus.pressed.connect(_change_dice_count.bind(type_id, 1))
+		row.add_child(plus)
+		row_y += 96.0
+	var confirm := Button.new()
+	confirm.text = "确认配置"
+	confirm.position = Vector2(350, 596)
+	confirm.size = Vector2(400, 50)
+	_style_button(confirm, 22)
+	confirm.pressed.connect(_close_dice_selector)
+	panel.add_child(confirm)
+	_update_dice_selector_summary()
+
+func _open_dice_selector() -> void:
+	dice_selector_overlay.visible = true
+
+func _close_dice_selector() -> void:
+	dice_selector_overlay.visible = false
+	_update_dice_loadout_button()
+
+func _change_dice_count(type_id: String, delta: int) -> void:
+	var total := _selected_dice_count()
+	var current := int(dice_selection_counts.get(type_id, 0))
+	if delta > 0 and total >= DiceCatalog.MAX_DICE:
+		return
+	dice_selection_counts[type_id] = clampi(current + delta, 0, DiceCatalog.MAX_DICE)
+	_update_dice_selector_summary()
+	_update_dice_loadout_button()
+
+func _selected_dice_count() -> int:
+	var total := 0
+	for count in dice_selection_counts.values():
+		total += int(count)
+	return total
+
+func _selected_dice_loadout() -> Array[String]:
+	var loadout: Array[String] = []
+	for definition in DiceCatalog.DEFINITIONS:
+		var type_id := String(definition["id"])
+		for index in range(int(dice_selection_counts.get(type_id, 0))):
+			loadout.append(type_id)
+	return DiceCatalog.normalize_loadout(loadout)
+
+func _dice_loadout_description() -> String:
+	var parts: Array[String] = []
+	var loadout := _selected_dice_loadout()
+	for definition in DiceCatalog.DEFINITIONS:
+		var type_id := String(definition["id"])
+		var count := loadout.count(type_id)
+		if count > 0:
+			parts.append("%s×%d" % [definition["name"], count])
+	return "、".join(parts)
+
+func _update_dice_selector_summary() -> void:
+	var selected := _selected_dice_count()
+	if dice_selection_summary != null:
+		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为默认骰　｜　%s" % [selected, 6 - selected, _dice_loadout_description()]
+	for type_id in dice_count_labels:
+		(dice_count_labels[type_id] as Label).text = str(dice_selection_counts[type_id])
+
+func _update_dice_loadout_button() -> void:
+	if dice_loadout_button != null:
+		dice_loadout_button.text = "选择骰子　%s" % _dice_loadout_description()
 
 
 func _setup_update_manager() -> void:
@@ -1026,7 +1184,7 @@ func _start_selected_game() -> void:
 	win_overlay.visible = false
 	rules_overlay.visible = false
 	settings_overlay.visible = false
-	session = Session.new(target)
+	session = Session.new(target, -1, [_selected_dice_loadout(), DiceCatalog.default_loadout()])
 	session.state_changed.connect(_on_state_changed)
 	session.rolled.connect(_on_rolled)
 	session.busted.connect(_on_busted)
@@ -1124,9 +1282,9 @@ func _begin_online_request(kind: String) -> void:
 
 func _on_network_connected() -> void:
 	if pending_online_request == "create":
-		network_client.create_room(online_target_option.get_item_id(online_target_option.selected))
+		network_client.create_room(online_target_option.get_item_id(online_target_option.selected), _selected_dice_loadout())
 	elif pending_online_request == "join":
-		network_client.join_room(room_code_edit.text)
+		network_client.join_room(room_code_edit.text, _selected_dice_loadout())
 
 func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 	pending_online_request = ""
@@ -1364,7 +1522,7 @@ func _on_state_changed(snapshot: GameSnapshot) -> void:
 	turn_label.text = "本轮：%d" % snapshot.turn_score
 	selected_label.text = "选定：%d" % snapshot.selected_score
 	_update_die_selection()
-	_update_held_dice(snapshot.held_dice)
+	_update_held_dice(snapshot.held_dice, snapshot.held_dice_types)
 	_update_buttons()
 	if snapshot.current_player == local_player_index and snapshot.phase == Session.Phase.AWAITING_SELECTION and not input_locked:
 		if snapshot.selected_indices.is_empty():
@@ -1376,15 +1534,19 @@ func _on_state_changed(snapshot: GameSnapshot) -> void:
 	elif not local_mode and snapshot.phase == Session.Phase.AWAITING_SELECTION and rolling_count == 0:
 		status_label.text = "等待对手选择" if snapshot.current_player != local_player_index else "选择得分骰"
 
-func _on_rolled(values: Array[int]) -> void:
+func _on_rolled(values: Array[int], dice_types: Array[String] = []) -> void:
 	input_locked = true
 	pending_bust = false
 	_clear_active_dice()
 	rolling_count = values.size()
+	if dice_types.size() != values.size():
+		dice_types.clear()
+		for index in range(values.size()):
+			dice_types.append(DiceCatalog.DEFAULT_ID)
 	for index in range(values.size()):
 		var die: DieView = Die.new()
 		dice_root.add_child(die)
-		die.configure(index, true)
+		die.configure(index, true, dice_types[index])
 		die.roll_finished.connect(_on_die_roll_finished)
 		die_views.append(die)
 		die.animate_roll(values[index], DIE_POSITIONS[index], index * 0.035)
@@ -1539,14 +1701,18 @@ func _update_die_selection() -> void:
 	for index in range(die_views.size()):
 		die_views[index].set_selection(session.selected_indices.has(index), index == focused_die and _can_human_act())
 
-func _update_held_dice(values: Array[int]) -> void:
+func _update_held_dice(values: Array[int], dice_types: Array[String] = []) -> void:
 	for child in held_root.get_children():
 		child.queue_free()
 	held_views.clear()
+	if dice_types.size() != values.size():
+		dice_types.clear()
+		for value in values:
+			dice_types.append(DiceCatalog.DEFAULT_ID)
 	for index in range(values.size()):
 		var die: DieView = Die.new()
 		held_root.add_child(die)
-		die.configure(index, false)
+		die.configure(index, false, dice_types[index])
 		die.scale = Vector3.ONE * 0.48
 		die.set_value(values[index])
 		die.set_base_position(Vector3(-2.0 + index * 0.78, 0.32, 2.45))

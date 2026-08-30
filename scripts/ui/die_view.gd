@@ -6,10 +6,9 @@ const ACTIVE_SCALE := 0.74
 signal roll_finished(die_index: int)
 
 static var shared_die_mesh: ArrayMesh
-static var shared_ivory_material: StandardMaterial3D
-static var shared_pip_material: StandardMaterial3D
 
 var die_index := -1
+var dice_type := DiceCatalog.DEFAULT_ID
 var value := 1
 var base_position := Vector3.ZERO
 var is_selected := false
@@ -17,12 +16,25 @@ var is_focused := false
 var model_root: Node3D
 var selection_ring: MeshInstance3D
 var ring_material: StandardMaterial3D
+var body_material: StandardMaterial3D
+var pip_material: StandardMaterial3D
 
 func _ready() -> void:
 	_build_visuals()
 
-func configure(index: int, _selectable: bool = true) -> void:
+func configure(index: int, _selectable: bool = true, type_id: String = DiceCatalog.DEFAULT_ID) -> void:
 	die_index = index
+	set_dice_type(type_id)
+
+func set_dice_type(type_id: String) -> void:
+	dice_type = type_id if DiceCatalog.is_valid_type(type_id) else DiceCatalog.DEFAULT_ID
+	if body_material == null or pip_material == null:
+		return
+	var definition := DiceCatalog.get_definition(dice_type)
+	body_material.albedo_color = definition["body_color"]
+	body_material.emission = definition["rim_color"]
+	body_material.emission_energy_multiplier = 0.05
+	pip_material.albedo_color = definition["pip_color"]
 
 func set_value(new_value: int) -> void:
 	value = clampi(new_value, 1, 6)
@@ -85,21 +97,22 @@ func animate_roll(new_value: int, target: Vector3, delay: float = 0.0) -> void:
 func _build_visuals() -> void:
 	if shared_die_mesh == null:
 		shared_die_mesh = _create_rounded_cube_mesh()
-		shared_ivory_material = StandardMaterial3D.new()
-		shared_ivory_material.albedo_color = Color("f1ddb0")
-		shared_ivory_material.roughness = 0.78
-		shared_ivory_material.metallic = 0.0
-		shared_pip_material = StandardMaterial3D.new()
-		shared_pip_material.albedo_color = Color("24170e")
-		shared_pip_material.roughness = 0.92
+	body_material = StandardMaterial3D.new()
+	body_material.roughness = 0.78
+	body_material.metallic = 0.0
+	body_material.emission_enabled = true
+	pip_material = StandardMaterial3D.new()
+	pip_material.roughness = 0.92
+	set_dice_type(dice_type)
 
 	model_root = Node3D.new()
 	model_root.name = "Model"
 	add_child(model_root)
 
 	var body := MeshInstance3D.new()
+	body.name = "Body"
 	body.mesh = shared_die_mesh
-	body.material_override = shared_ivory_material
+	body.material_override = body_material
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	model_root.add_child(body)
 
@@ -144,7 +157,7 @@ func _add_face_pips(face_value: int, normal: Vector3, axis_u: Vector3, axis_v: V
 		cylinder.height = 0.012
 		cylinder.radial_segments = 18
 		pip.mesh = cylinder
-		pip.material_override = shared_pip_material
+		pip.material_override = pip_material
 		pip.position = normal * 0.555 + axis_u * grid_position.x * 0.225 + axis_v * grid_position.y * 0.225
 		pip.quaternion = Quaternion(Vector3.UP, normal)
 		model_root.add_child(pip)

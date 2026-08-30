@@ -46,7 +46,10 @@ static func snapshot_to_dictionary(snapshot: GameSnapshot) -> Dictionary:
 		"turn_score": snapshot.turn_score,
 		"selected_score": snapshot.selected_score,
 		"current_roll": snapshot.current_roll.duplicate(),
+		"current_roll_types": snapshot.current_roll_types.duplicate(),
 		"held_dice": snapshot.held_dice.duplicate(),
+		"held_dice_types": snapshot.held_dice_types.duplicate(),
+		"player_dice_loadouts": [snapshot.player_dice_loadouts[0].duplicate(), snapshot.player_dice_loadouts[1].duplicate()] if snapshot.player_dice_loadouts.size() >= 2 else [DiceCatalog.default_loadout(), DiceCatalog.default_loadout()],
 		"selected_indices": snapshot.selected_indices.duplicate(),
 		"dice_to_roll": snapshot.dice_to_roll,
 		"phase": snapshot.phase,
@@ -61,7 +64,18 @@ static func snapshot_from_dictionary(data: Dictionary) -> GameSnapshot:
 	snapshot.turn_score = int(data.get("turn_score", 0))
 	snapshot.selected_score = int(data.get("selected_score", 0))
 	snapshot.current_roll = _int_array(data.get("current_roll", []))
+	snapshot.current_roll_types = _string_array(data.get("current_roll_types", []))
+	if snapshot.current_roll_types.size() != snapshot.current_roll.size():
+		snapshot.current_roll_types.assign(_default_types(snapshot.current_roll.size()))
 	snapshot.held_dice = _int_array(data.get("held_dice", []))
+	snapshot.held_dice_types = _string_array(data.get("held_dice_types", []))
+	if snapshot.held_dice_types.size() != snapshot.held_dice.size():
+		snapshot.held_dice_types.assign(_default_types(snapshot.held_dice.size()))
+	var loadouts: Array = data.get("player_dice_loadouts", [])
+	snapshot.player_dice_loadouts = [
+		DiceCatalog.normalize_loadout(loadouts[0] if loadouts.size() > 0 and loadouts[0] is Array else []),
+		DiceCatalog.normalize_loadout(loadouts[1] if loadouts.size() > 1 and loadouts[1] is Array else []),
+	]
 	snapshot.selected_indices = _int_array(data.get("selected_indices", []))
 	snapshot.dice_to_roll = int(data.get("dice_to_roll", 6))
 	snapshot.phase = int(data.get("phase", 0))
@@ -72,4 +86,16 @@ static func _int_array(values: Array) -> Array[int]:
 	var result: Array[int] = []
 	for value in values:
 		result.append(int(value))
+	return result
+
+static func _string_array(values: Array) -> Array[String]:
+	var result: Array[String] = []
+	for value in values:
+		result.append(String(value))
+	return result
+
+static func _default_types(count: int) -> Array[String]:
+	var result: Array[String] = []
+	for index in range(count):
+		result.append(DiceCatalog.DEFAULT_ID)
 	return result

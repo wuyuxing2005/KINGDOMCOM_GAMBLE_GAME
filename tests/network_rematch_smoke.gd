@@ -18,6 +18,8 @@ var guest_rematch_snapshot: GameSnapshot
 var guest_error := ""
 var host_opponent_left := false
 var failures := 0
+var host_loadout := ["lucky", "lucky", "default", "default", "default", "default"]
+var guest_loadout := ["royal", "iron", "default", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -58,7 +60,7 @@ func _run() -> void:
 		_fail("房主连接超时")
 		_finish()
 		return
-	host.create_room(1500)
+	host.create_room(1500, host_loadout)
 	if not await _wait_until(func() -> bool: return not room_code.is_empty()):
 		_fail("创建房间超时")
 		_finish()
@@ -68,7 +70,7 @@ func _run() -> void:
 		_fail("客方连接超时")
 		_finish()
 		return
-	guest.join_room(room_code)
+	guest.join_room(room_code, guest_loadout)
 	if not await _wait_until(func() -> bool: return ready_count == 2 and host_snapshot != null and guest_snapshot != null):
 		_fail("初始对局未同步")
 		_finish()
@@ -100,6 +102,8 @@ func _run() -> void:
 		_fail("新目标分数未同步")
 	if host_rematch_snapshot.scores != [0, 0] or guest_rematch_snapshot.scores != [0, 0]:
 		_fail("新局比分未清零")
+	if host_rematch_snapshot.player_dice_loadouts != [host_loadout, guest_loadout] or guest_rematch_snapshot.player_dice_loadouts != [host_loadout, guest_loadout]:
+		_fail("重赛未继承双方骰子配置")
 	if host_rematch_snapshot.current_player not in [0, 1] or host_rematch_snapshot.current_player != guest_rematch_snapshot.current_player:
 		_fail("新局随机先手未同步")
 	if server.rooms[room_code]["session"] == old_session:

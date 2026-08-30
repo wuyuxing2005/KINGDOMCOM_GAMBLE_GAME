@@ -13,6 +13,8 @@ var guest_snapshot: GameSnapshot
 var failures := 0
 var expected_starting_player := -1
 var actual_starting_player := -1
+var host_loadout := ["lucky", "lucky", "default", "default", "default", "default"]
+var guest_loadout := ["iron", "royal", "reckless", "default", "default", "default"]
 
 func _initialize() -> void:
 	_run.call_deferred()
@@ -50,7 +52,7 @@ func _run() -> void:
 		_fail("创建者连接超时")
 		_finish(server)
 		return
-	host.create_room(1500)
+	host.create_room(1500, host_loadout)
 	if not await _wait_until(func() -> bool: return not room_code.is_empty()):
 		_fail("创建房间超时")
 		_finish(server)
@@ -60,7 +62,7 @@ func _run() -> void:
 		_fail("加入者连接超时")
 		_finish(server)
 		return
-	guest.join_room(room_code)
+	guest.join_room(room_code, guest_loadout)
 	if not await _wait_until(func() -> bool: return ready_count == 2):
 		_fail("双端未收到房间开始消息")
 		_finish(server)
@@ -76,6 +78,11 @@ func _run() -> void:
 	actual_starting_player = host_snapshot.current_player
 	if host_snapshot.current_roll != guest_snapshot.current_roll:
 		_fail("双端骰子点数不一致")
+	if host_snapshot.player_dice_loadouts != [host_loadout, guest_loadout] or guest_snapshot.player_dice_loadouts != [host_loadout, guest_loadout]:
+		_fail("双方独立骰子配置未同步")
+	var expected_roll_types: Array = host_loadout if host_snapshot.current_player == 0 else guest_loadout
+	if host_snapshot.current_roll_types != expected_roll_types or guest_snapshot.current_roll_types != expected_roll_types:
+		_fail("首轮未使用先手玩家的骰子配置")
 	var subsets := ScoringRules.get_scoring_subsets(host_snapshot.current_roll)
 	if subsets.is_empty():
 		_fail("首轮快照意外为爆骰状态")

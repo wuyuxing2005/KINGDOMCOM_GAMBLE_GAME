@@ -10,6 +10,8 @@
 
 默认目标为 4000 分，主菜单也可选择 1500、2500 或 6000 分。
 
+开始游戏前可点击“选择骰子”配置最多六枚骰子；没有主动选满的空位会自动补为默认骰。选择页会直接展示每种骰子的六面概率、优势和代价。目前包含默认骰、幸运骰、铁卫骰、王权骰和孤注骰，五种骰子在桌面上使用不同的本体与凹点配色。单人模式中电脑使用默认骰；联机模式中双方各自提交自己的骰子配置，重赛时沿用原配置。
+
 主界面右上角提供“检查更新”。点击后会优先通过国内 ECS 更新源检查并下载最新版，国内源不可用时自动回退 GitHub：Android 会打开系统安装确认界面，Windows 会退出游戏、替换程序并自动重新启动。
 
 ## 联机对战
@@ -56,6 +58,13 @@ Windows 版设置页还提供“无边框全屏”开关；Android 版不显示�
 ```
 
 测试覆盖计分组合、非法混选、爆骰、热骰、状态切换、AI 决策和全部 46,656 种六骰结果。
+
+骰子类型与选择界面测试：
+
+```powershell
+& ".tools\godot-4.6.1\Godot_v4.6.1-stable_win64_console.exe" --headless --path "D:\shaizi_game" --script "res://tests/dice_types_smoke.gd"
+& ".tools\godot-4.6.1\Godot_v4.6.1-stable_win64_console.exe" --path "D:\shaizi_game" --script "res://tests/dice_selection_ui_smoke.gd"
+```
 
 双客户端联机测试：
 

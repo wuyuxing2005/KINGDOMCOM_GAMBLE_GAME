@@ -12,7 +12,7 @@ signal rematch_waiting
 signal rematch_choose_target
 signal rematch_started(snapshot: GameSnapshot)
 signal snapshot_received(snapshot: GameSnapshot)
-signal rolled(values: Array[int])
+signal rolled(values: Array[int], dice_types: Array[String])
 signal busted(player_index: int)
 signal hot_dice(player_index: int)
 signal chat_received(player_index: int, kind: String, text: String, sticker_id: String)
@@ -45,11 +45,11 @@ func disconnect_from_server() -> void:
 	peer = null
 	is_connected = false
 
-func create_room(target_score: int) -> void:
-	_send({"type": Protocol.CREATE_ROOM, "target_score": target_score})
+func create_room(target_score: int, dice_loadout: Array = []) -> void:
+	_send({"type": Protocol.CREATE_ROOM, "target_score": target_score, "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
 
-func join_room(room_code: String) -> void:
-	_send({"type": Protocol.JOIN_ROOM, "room_code": room_code.strip_edges().to_upper()})
+func join_room(room_code: String, dice_loadout: Array = []) -> void:
+	_send({"type": Protocol.JOIN_ROOM, "room_code": room_code.strip_edges().to_upper(), "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
 
 func send_action(action: GameAction) -> void:
 	_send({"type": Protocol.ACTION, "action": Protocol.action_to_dictionary(action)})
@@ -98,7 +98,11 @@ func _handle_message(message: Dictionary) -> void:
 		Protocol.SNAPSHOT:
 			snapshot_received.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
 		Protocol.ROLLED:
-			rolled.emit(Protocol._int_array(message.get("values", [])))
+			var values := Protocol._int_array(message.get("values", []))
+			var dice_types := Protocol._string_array(message.get("dice_types", []))
+			if dice_types.size() != values.size():
+				dice_types.assign(Protocol._default_types(values.size()))
+			rolled.emit(values, dice_types)
 		Protocol.BUSTED:
 			busted.emit(int(message.get("player_index", -1)))
 		Protocol.HOT_DICE:

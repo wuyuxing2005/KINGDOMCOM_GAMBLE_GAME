@@ -42,9 +42,9 @@ func _process(_delta: float) -> void:
 func _handle_message(sender: int, message: Dictionary) -> void:
 	match String(message.get("type", "")):
 		Protocol.CREATE_ROOM:
-			_create_room(sender, int(message.get("target_score", 4000)))
+			_create_room(sender, int(message.get("target_score", 4000)), message.get("dice_loadout", []))
 		Protocol.JOIN_ROOM:
-			_join_room(sender, String(message.get("room_code", "")).strip_edges().to_upper())
+			_join_room(sender, String(message.get("room_code", "")).strip_edges().to_upper(), message.get("dice_loadout", []))
 		Protocol.ACTION:
 			_handle_action(sender, message.get("action", {}))
 		Protocol.CHAT_SEND:
@@ -56,7 +56,7 @@ func _handle_message(sender: int, message: Dictionary) -> void:
 		_:
 			_send_error(sender, "未知请求")
 
-func _create_room(sender: int, target_score: int) -> void:
+func _create_room(sender: int, target_score: int, dice_loadout: Array = []) -> void:
 	if peer_rooms.has(sender):
 		_send_error(sender, "你已经在房间中")
 		return
@@ -64,13 +64,14 @@ func _create_room(sender: int, target_score: int) -> void:
 		_send_error(sender, "目标分数无效")
 		return
 	var code := _new_room_code()
-	var session: GameSession = Session.new(target_score, session_seed)
-	rooms[code] = {"players": [sender], "session": session, "rematch_players": []}
+	var loadouts := [DiceCatalog.normalize_loadout(dice_loadout), DiceCatalog.default_loadout()]
+	var session: GameSession = Session.new(target_score, session_seed, loadouts)
+	rooms[code] = {"players": [sender], "session": session, "rematch_players": [], "dice_loadouts": loadouts}
 	peer_rooms[sender] = code
 	_bind_session(code, session)
 	_send(sender, {"type": Protocol.ROOM_CREATED, "room_code": code, "player_index": 0})
 
-func _join_room(sender: int, code: String) -> void:
+func _join_room(sender: int, code: String, dice_loadout: Array = []) -> void:
 	if peer_rooms.has(sender):
 		_send_error(sender, "你已经在房间中")
 		return
@@ -86,6 +87,9 @@ func _join_room(sender: int, code: String) -> void:
 	peer_rooms[sender] = code
 	_send(sender, {"type": Protocol.ROOM_JOINED, "room_code": code, "player_index": 1})
 	var session: GameSession = room["session"]
+	var loadouts: Array = room["dice_loadouts"]
+	loadouts[1] = DiceCatalog.normalize_loadout(dice_loadout)
+	session.set_player_loadout(1, loadouts[1])
 	session.current_player = rng.randi_range(0, 1)
 	_broadcast(code, {"type": Protocol.ROOM_READY, "snapshot": Protocol.snapshot_to_dictionary(session.get_snapshot())})
 	call_deferred("_roll_room", code)
@@ -204,7 +208,7 @@ func _handle_rematch_confirm(sender: int, target_score: int) -> void:
 	if not target_score in [1500, 2500, 4000, 6000]:
 		_send_error(sender, "目标分数无效")
 		return
-	var new_session: GameSession = Session.new(target_score, session_seed)
+	var new_session: GameSession = Session.new(target_score, session_seed, room["dice_loadouts"])
 	new_session.current_player = rng.randi_range(0, 1)
 	room["session"] = new_session
 	room["rematch_players"] = []
@@ -222,8 +226,8 @@ func _bind_session(code: String, session: GameSession) -> void:
 func _on_session_state(snapshot: GameSnapshot, code: String) -> void:
 	_broadcast(code, {"type": Protocol.SNAPSHOT, "snapshot": Protocol.snapshot_to_dictionary(snapshot)})
 
-func _on_session_rolled(values: Array[int], code: String) -> void:
-	_broadcast(code, {"type": Protocol.ROLLED, "values": values})
+func _on_session_rolled(values: Array[int], dice_types: Array[String], code: String) -> void:
+	_broadcast(code, {"type": Protocol.ROLLED, "values": values, "dice_types": dice_types})
 
 func _on_session_busted(player_index: int, code: String) -> void:
 	_broadcast(code, {"type": Protocol.BUSTED, "player_index": player_index})
