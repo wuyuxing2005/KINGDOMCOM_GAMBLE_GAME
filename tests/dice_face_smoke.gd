@@ -8,7 +8,7 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var main = current_scene
-	main._start_selected_game()
+	main._start_local_game(DiceCatalog.default_loadout())
 	await create_timer(2.4).timeout
 	var camera: Camera3D = main.find_children("*", "Camera3D", true, false)[0]
 	camera.look_at_from_position(Vector3(0, 12.0, 0.01), Vector3.ZERO, Vector3.BACK)

@@ -70,11 +70,16 @@ var ui_root: Control
 var menu_screen: Control
 var game_hud: Control
 var target_option: OptionButton
-var dice_loadout_button: Button
 var dice_selector_overlay: Control
 var dice_selection_summary: Label
 var dice_selection_counts: Dictionary = {}
 var dice_count_labels: Dictionary = {}
+var dice_selector_controls: Array[BaseButton] = []
+var dice_selector_confirm_button: Button
+var dice_selector_cancel_button: Button
+var dice_selection_context := ""
+var pending_single_target := 4000
+var selection_rng := RandomNumberGenerator.new()
 var player_title_label: Label
 var opponent_title_label: Label
 var player_score_label: Label
@@ -157,6 +162,7 @@ func _ready() -> void:
 		return
 	parchment_texture = load("res://assets/ui/parchment_panel.png")
 	main_font = load("res://assets/fonts/LXGWWenKai-Regular.ttf")
+	selection_rng.randomize()
 	_build_audio()
 	_build_world()
 	_build_ui()
@@ -200,7 +206,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("back_to_menu"):
 		if dice_selector_overlay != null and dice_selector_overlay.visible:
-			_close_dice_selector()
+			_cancel_dice_selection()
 		elif chat_overlay.visible:
 			_close_chat()
 		elif sticker_popup.visible:
@@ -347,14 +353,14 @@ func _build_menu() -> void:
 
 	var panel := _make_parchment_panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.position = Vector2(-285, -330)
-	panel.size = Vector2(570, 660)
+	panel.position = Vector2(-285, -300)
+	panel.size = Vector2(570, 600)
 	menu_screen.add_child(panel)
 
 	var content := VBoxContainer.new()
 	content.position = Vector2(76, 48)
-	content.size = Vector2(418, 565)
-	content.add_theme_constant_override("separation", 8)
+	content.size = Vector2(418, 505)
+	content.add_theme_constant_override("separation", 11)
 	panel.add_child(content)
 
 	var title := _make_label("中世纪骰局", 48, INK, HORIZONTAL_ALIGNMENT_CENTER)
@@ -370,12 +376,6 @@ func _build_menu() -> void:
 	_style_button(target_option, 24)
 	target_option.custom_minimum_size = Vector2(0, 58)
 	content.add_child(target_option)
-	dice_loadout_button = Button.new()
-	dice_loadout_button.custom_minimum_size.y = 54
-	_style_button(dice_loadout_button, 21)
-	dice_loadout_button.pressed.connect(_open_dice_selector)
-	content.add_child(dice_loadout_button)
-	_update_dice_loadout_button()
 	var start_button := Button.new()
 	start_button.text = "单人对电脑"
 	start_button.custom_minimum_size.y = 62
@@ -406,6 +406,7 @@ func _build_dice_selector_overlay() -> void:
 	dice_selector_overlay.name = "DiceSelectorOverlay"
 	dice_selector_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dice_selector_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	dice_selector_overlay.z_index = 110
 	dice_selector_overlay.visible = false
 	ui_root.add_child(dice_selector_overlay)
 	var shade := ColorRect.new()
@@ -472,6 +473,7 @@ func _build_dice_selector_overlay() -> void:
 		_style_button(minus, 25)
 		minus.pressed.connect(_change_dice_count.bind(type_id, -1))
 		row.add_child(minus)
+		dice_selector_controls.append(minus)
 		var count_label := _make_label("0", 25, INK, HORIZONTAL_ALIGNMENT_CENTER)
 		count_label.position = Vector2(878, 20)
 		count_label.size = Vector2(54, 52)
@@ -484,22 +486,56 @@ func _build_dice_selector_overlay() -> void:
 		_style_button(plus, 25)
 		plus.pressed.connect(_change_dice_count.bind(type_id, 1))
 		row.add_child(plus)
+		dice_selector_controls.append(plus)
 		row_y += 96.0
-	var confirm := Button.new()
-	confirm.text = "确认配置"
-	confirm.position = Vector2(350, 596)
-	confirm.size = Vector2(400, 50)
-	_style_button(confirm, 22)
-	confirm.pressed.connect(_close_dice_selector)
-	panel.add_child(confirm)
+	dice_selector_cancel_button = Button.new()
+	dice_selector_cancel_button.text = "返回"
+	dice_selector_cancel_button.position = Vector2(250, 596)
+	dice_selector_cancel_button.size = Vector2(250, 50)
+	_style_button(dice_selector_cancel_button, 21)
+	dice_selector_cancel_button.pressed.connect(_cancel_dice_selection)
+	panel.add_child(dice_selector_cancel_button)
+	dice_selector_confirm_button = Button.new()
+	dice_selector_confirm_button.text = "确认配置"
+	dice_selector_confirm_button.position = Vector2(520, 596)
+	dice_selector_confirm_button.size = Vector2(330, 50)
+	_style_button(dice_selector_confirm_button, 22)
+	dice_selector_confirm_button.pressed.connect(_confirm_dice_selection)
+	panel.add_child(dice_selector_confirm_button)
 	_update_dice_selector_summary()
 
-func _open_dice_selector() -> void:
+func _open_dice_selector(context: String) -> void:
+	dice_selection_context = context
+	for control in dice_selector_controls:
+		control.disabled = false
+	dice_selector_confirm_button.disabled = false
+	dice_selector_confirm_button.text = "确认配置"
+	dice_selector_cancel_button.disabled = false
+	_update_dice_selector_summary()
 	dice_selector_overlay.visible = true
 
 func _close_dice_selector() -> void:
 	dice_selector_overlay.visible = false
-	_update_dice_loadout_button()
+	dice_selection_context = ""
+
+func _cancel_dice_selection() -> void:
+	var was_online := dice_selection_context == "online"
+	_close_dice_selector()
+	if was_online:
+		_show_menu()
+
+func _confirm_dice_selection() -> void:
+	if dice_selection_context == "single":
+		var player_loadout := _selected_dice_loadout()
+		_close_dice_selector()
+		_start_local_game(player_loadout)
+	elif dice_selection_context == "online":
+		for control in dice_selector_controls:
+			control.disabled = true
+		dice_selector_confirm_button.disabled = true
+		dice_selector_confirm_button.text = "已确认"
+		dice_selection_summary.text = "骰子配置已确认，等待对方选择…"
+		network_client.confirm_dice_loadout(_selected_dice_loadout())
 
 func _change_dice_count(type_id: String, delta: int) -> void:
 	var total := _selected_dice_count()
@@ -508,7 +544,6 @@ func _change_dice_count(type_id: String, delta: int) -> void:
 		return
 	dice_selection_counts[type_id] = clampi(current + delta, 0, DiceCatalog.MAX_DICE)
 	_update_dice_selector_summary()
-	_update_dice_loadout_button()
 
 func _selected_dice_count() -> int:
 	var total := 0
@@ -540,12 +575,6 @@ func _update_dice_selector_summary() -> void:
 		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为默认骰　｜　%s" % [selected, 6 - selected, _dice_loadout_description()]
 	for type_id in dice_count_labels:
 		(dice_count_labels[type_id] as Label).text = str(dice_selection_counts[type_id])
-
-func _update_dice_loadout_button() -> void:
-	if dice_loadout_button != null:
-		dice_loadout_button.text = "选择骰子　%s" % _dice_loadout_description()
-
-
 func _setup_update_manager() -> void:
 	update_manager = UpdateManager.new()
 	update_manager.status_changed.connect(_on_update_status_changed)
@@ -1169,6 +1198,11 @@ func _build_win_overlay() -> void:
 	panel.add_child(menu)
 
 func _start_selected_game() -> void:
+	pending_single_target = target_option.get_item_id(target_option.selected)
+	win_overlay.visible = false
+	_open_dice_selector("single")
+
+func _start_local_game(player_loadout: Array[String]) -> void:
 	get_tree().paused = false
 	local_mode = true
 	_clear_chat_messages()
@@ -1176,7 +1210,6 @@ func _start_selected_game() -> void:
 	local_player_index = 0
 	player_title_label.text = "玩家"
 	opponent_title_label.text = "电脑"
-	var target := target_option.get_item_id(target_option.selected)
 	game_generation += 1
 	_clear_all_dice()
 	menu_screen.visible = false
@@ -1184,7 +1217,8 @@ func _start_selected_game() -> void:
 	win_overlay.visible = false
 	rules_overlay.visible = false
 	settings_overlay.visible = false
-	session = Session.new(target, -1, [_selected_dice_loadout(), DiceCatalog.default_loadout()])
+	var ai_loadout := DiceCatalog.random_loadout(selection_rng)
+	session = Session.new(pending_single_target, -1, [player_loadout, ai_loadout])
 	session.state_changed.connect(_on_state_changed)
 	session.rolled.connect(_on_rolled)
 	session.busted.connect(_on_busted)
@@ -1201,6 +1235,8 @@ func _bind_network_client() -> void:
 	network_client.disconnected.connect(_on_network_disconnected)
 	network_client.room_assigned.connect(_on_network_room_assigned)
 	network_client.room_ready.connect(_on_network_room_ready)
+	network_client.dice_selection_started.connect(_on_network_dice_selection_started)
+	network_client.dice_selection_waiting.connect(_on_network_dice_selection_waiting)
 	network_client.rematch_waiting.connect(_on_network_rematch_waiting)
 	network_client.rematch_choose_target.connect(_on_network_rematch_choose_target)
 	network_client.rematch_started.connect(_on_network_rematch_started)
@@ -1282,9 +1318,9 @@ func _begin_online_request(kind: String) -> void:
 
 func _on_network_connected() -> void:
 	if pending_online_request == "create":
-		network_client.create_room(online_target_option.get_item_id(online_target_option.selected), _selected_dice_loadout())
+		network_client.create_room(online_target_option.get_item_id(online_target_option.selected))
 	elif pending_online_request == "join":
-		network_client.join_room(room_code_edit.text, _selected_dice_loadout())
+		network_client.join_room(room_code_edit.text)
 
 func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 	pending_online_request = ""
@@ -1297,7 +1333,27 @@ func _on_network_room_assigned(room_code: String, player_index: int) -> void:
 		create_room_button.disabled = true
 		_set_online_status("请把房间码发给另一位玩家，正在等待加入…")
 	else:
-		_set_online_status("已加入房间 %s，正在开始…" % room_code)
+		_set_online_status("已加入房间 %s，等待双方选择骰子…" % room_code)
+
+func _on_network_dice_selection_started(_is_rematch: bool) -> void:
+	get_tree().paused = false
+	local_mode = false
+	online_game_finished = false
+	game_generation += 1
+	input_locked = true
+	session = null
+	latest_snapshot = null
+	_clear_all_dice()
+	menu_screen.visible = false
+	online_overlay.visible = false
+	game_hud.visible = false
+	win_overlay.visible = false
+	settings_overlay.visible = false
+	_open_dice_selector("online")
+
+func _on_network_dice_selection_waiting() -> void:
+	if dice_selector_overlay.visible and dice_selection_context == "online":
+		dice_selection_summary.text = "骰子配置已确认，等待对方选择…"
 
 func _on_network_room_ready(snapshot: GameSnapshot) -> void:
 	_start_network_game(snapshot)
@@ -1307,6 +1363,7 @@ func _on_network_rematch_started(snapshot: GameSnapshot) -> void:
 
 func _start_network_game(snapshot: GameSnapshot) -> void:
 	get_tree().paused = false
+	_close_dice_selector()
 	local_mode = false
 	_clear_chat_messages()
 	chat_entry.visible = true
@@ -1383,7 +1440,9 @@ func _on_network_snapshot(snapshot: GameSnapshot) -> void:
 	_on_state_changed(snapshot)
 
 func _on_network_disconnected() -> void:
-	if online_overlay != null and online_overlay.visible:
+	if dice_selector_overlay != null and dice_selector_overlay.visible and dice_selection_context == "online":
+		_show_online_disconnect("与服务器的连接已断开")
+	elif online_overlay != null and online_overlay.visible:
 		create_room_button.disabled = false
 		join_room_button.disabled = false
 		_set_online_status("与服务器的连接已断开")
@@ -1397,7 +1456,10 @@ func _on_network_disconnected() -> void:
 		_show_online_disconnect("与服务器的连接已断开")
 
 func _on_network_error(message: String) -> void:
-	if online_overlay.visible:
+	if dice_selector_overlay.visible and dice_selection_context == "online":
+		dice_selection_summary.text = message
+		dice_selector_cancel_button.disabled = false
+	elif online_overlay.visible:
 		create_room_button.disabled = false
 		join_room_button.disabled = false
 		_set_online_status(message)
@@ -1421,6 +1483,8 @@ func _on_opponent_left() -> void:
 
 func _show_online_disconnect(message: String) -> void:
 	game_generation += 1
+	dice_selector_overlay.visible = false
+	dice_selection_context = ""
 	_clear_chat_messages()
 	input_locked = true
 	session = null
@@ -1438,6 +1502,8 @@ func _show_online_disconnect(message: String) -> void:
 func _show_menu() -> void:
 	get_tree().paused = false
 	game_generation += 1
+	dice_selector_overlay.visible = false
+	dice_selection_context = ""
 	_clear_chat_messages()
 	chat_entry.visible = false
 	input_locked = true

@@ -98,6 +98,14 @@ static func default_loadout() -> Array[String]:
 	return normalize_loadout([])
 
 
+static func random_loadout(rng: RandomNumberGenerator) -> Array[String]:
+	var ids := get_ids()
+	var result: Array[String] = []
+	for index in range(MAX_DICE):
+		result.append(ids[rng.randi_range(0, ids.size() - 1)])
+	return result
+
+
 static func roll_value(type_id: String, rng: RandomNumberGenerator) -> int:
 	var definition := get_definition(type_id)
 	var weights: Array = definition["weights"]

@@ -8,6 +8,8 @@ var host: NetworkClient
 var guest: NetworkClient
 var room_code := ""
 var ready_count := 0
+var dice_selection_started_count := 0
+var host_dice_waiting_count := 0
 var host_snapshot: GameSnapshot
 var guest_snapshot: GameSnapshot
 var failures := 0
@@ -44,6 +46,9 @@ func _run() -> void:
 	host.room_assigned.connect(func(code: String, _index: int) -> void: room_code = code)
 	host.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
 	guest.room_ready.connect(func(_snapshot: GameSnapshot) -> void: ready_count += 1)
+	host.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
+	guest.dice_selection_started.connect(func(_is_rematch: bool) -> void: dice_selection_started_count += 1)
+	host.dice_selection_waiting.connect(func() -> void: host_dice_waiting_count += 1)
 	host.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: host_snapshot = snapshot)
 	guest.snapshot_received.connect(func(snapshot: GameSnapshot) -> void: guest_snapshot = snapshot)
 
@@ -52,7 +57,7 @@ func _run() -> void:
 		_fail("创建者连接超时")
 		_finish(server)
 		return
-	host.create_room(1500, host_loadout)
+	host.create_room(1500)
 	if not await _wait_until(func() -> bool: return not room_code.is_empty()):
 		_fail("创建房间超时")
 		_finish(server)
@@ -62,9 +67,19 @@ func _run() -> void:
 		_fail("加入者连接超时")
 		_finish(server)
 		return
-	guest.join_room(room_code, guest_loadout)
+	guest.join_room(room_code)
+	if not await _wait_until(func() -> bool: return dice_selection_started_count == 2):
+		_fail("双端未进入骰子选择阶段")
+		_finish(server)
+		return
+	host.confirm_dice_loadout(host_loadout)
+	if not await _wait_until(func() -> bool: return host_dice_waiting_count == 1):
+		_fail("先确认者未进入等待状态")
+	if ready_count != 0:
+		_fail("单方确认时服务器提前开始对局")
+	guest.confirm_dice_loadout(guest_loadout)
 	if not await _wait_until(func() -> bool: return ready_count == 2):
-		_fail("双端未收到房间开始消息")
+		_fail("双方确认骰子后未收到房间开始消息")
 		_finish(server)
 		return
 	if not await _wait_until(func() -> bool: return host_snapshot != null and guest_snapshot != null and host_snapshot.phase == GameSession.Phase.AWAITING_SELECTION):

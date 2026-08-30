@@ -8,6 +8,8 @@ signal connected
 signal disconnected
 signal room_assigned(room_code: String, player_index: int)
 signal room_ready(snapshot: GameSnapshot)
+signal dice_selection_started(is_rematch: bool)
+signal dice_selection_waiting
 signal rematch_waiting
 signal rematch_choose_target
 signal rematch_started(snapshot: GameSnapshot)
@@ -45,11 +47,14 @@ func disconnect_from_server() -> void:
 	peer = null
 	is_connected = false
 
-func create_room(target_score: int, dice_loadout: Array = []) -> void:
-	_send({"type": Protocol.CREATE_ROOM, "target_score": target_score, "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
+func create_room(target_score: int) -> void:
+	_send({"type": Protocol.CREATE_ROOM, "target_score": target_score})
 
-func join_room(room_code: String, dice_loadout: Array = []) -> void:
-	_send({"type": Protocol.JOIN_ROOM, "room_code": room_code.strip_edges().to_upper(), "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
+func join_room(room_code: String) -> void:
+	_send({"type": Protocol.JOIN_ROOM, "room_code": room_code.strip_edges().to_upper()})
+
+func confirm_dice_loadout(dice_loadout: Array) -> void:
+	_send({"type": Protocol.DICE_LOADOUT_CONFIRM, "dice_loadout": DiceCatalog.normalize_loadout(dice_loadout)})
 
 func send_action(action: GameAction) -> void:
 	_send({"type": Protocol.ACTION, "action": Protocol.action_to_dictionary(action)})
@@ -89,6 +94,10 @@ func _handle_message(message: Dictionary) -> void:
 			room_assigned.emit(String(message.get("room_code", "")), int(message.get("player_index", 0)))
 		Protocol.ROOM_READY:
 			room_ready.emit(Protocol.snapshot_from_dictionary(message.get("snapshot", {})))
+		Protocol.DICE_SELECTION_STARTED:
+			dice_selection_started.emit(bool(message.get("is_rematch", false)))
+		Protocol.DICE_SELECTION_WAITING:
+			dice_selection_waiting.emit()
 		Protocol.REMATCH_WAITING:
 			rematch_waiting.emit()
 		Protocol.REMATCH_CHOOSE_TARGET:

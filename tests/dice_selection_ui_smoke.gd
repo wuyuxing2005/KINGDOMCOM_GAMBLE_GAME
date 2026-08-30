@@ -14,15 +14,21 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 	var scene = current_scene
-	if scene.dice_loadout_button == null or not scene.dice_loadout_button.text.contains("默认骰×6"):
-		_fail("主菜单没有显示六枚默认骰配置")
+	if _collect_text(scene.menu_screen).contains("选择骰子"):
+		_fail("主菜单不应直接显示骰子选择入口")
 	if DisplayServer.get_name() != "headless":
 		await process_frame
 		root.get_texture().get_image().save_png("res://build/dice-menu-smoke.png")
-	scene._open_dice_selector()
+	scene.selection_rng.seed = 314159
+	var expected_ai_rng := RandomNumberGenerator.new()
+	expected_ai_rng.seed = 314159
+	var expected_ai_loadout := DiceCatalog.random_loadout(expected_ai_rng)
+	scene._start_selected_game()
 	await process_frame
 	if not scene.dice_selector_overlay.visible:
-		_fail("骰子选择界面未打开")
+		_fail("点击单人游戏后未在开局前打开骰子选择界面")
+	if scene.session != null:
+		_fail("玩家确认骰子之前单人对局提前开始")
 	var all_text := _collect_text(scene.dice_selector_overlay)
 	for definition in DiceCatalog.DEFINITIONS:
 		if not all_text.contains(String(definition["name"])):
@@ -53,18 +59,23 @@ func _run() -> void:
 		var image := root.get_texture().get_image()
 		if image.save_png("res://build/dice-selector-smoke.png") != OK:
 			_fail("无法保存骰子选择界面截图")
-	scene._close_dice_selector()
-	scene._start_selected_game()
+	scene._confirm_dice_selection()
+	if scene.dice_selector_overlay.visible:
+		_fail("确认配置后骰子选择界面未关闭")
+	if scene.session == null:
+		_fail("确认配置后单人对局未开始")
+		quit(1)
+		return
 	if scene.session.player_dice_loadouts[0] != configured:
 		_fail("单人游戏未使用玩家配置")
-	if scene.session.player_dice_loadouts[1] != DiceCatalog.default_loadout():
-		_fail("电脑没有使用六枚默认骰")
+	if scene.session.player_dice_loadouts[1] != expected_ai_loadout:
+		_fail("电脑没有按随机结果选择六枚骰子")
 	if DisplayServer.get_name() != "headless":
 		await create_timer(1.8).timeout
 		root.get_texture().get_image().save_png("res://build/dice-types-game-smoke.png")
 	_test_die_styles(scene)
 	if failures == 0:
-		print("PASS: 骰子选择、六枚上限、默认补齐、公开概率利弊和差异外观测试通过")
+		print("PASS: 开局前选骰、六枚上限、默认补齐、电脑随机选骰和差异外观测试通过")
 	quit(1 if failures > 0 else 0)
 
 

@@ -9,6 +9,8 @@ var host: NetworkClient
 var guest: NetworkClient
 var room_code := ""
 var ready_count := 0
+var dice_selection_started_count := 0
+var rematch_selection_started_count := 0
 var snapshot_version := 0
 var host_snapshot: GameSnapshot
 var guest_snapshot: GameSnapshot
@@ -45,6 +47,14 @@ func _run() -> void:
 		guest_snapshot = snapshot
 		ready_count += 1
 	)
+	host.dice_selection_started.connect(func(is_rematch: bool) -> void:
+		dice_selection_started_count += 1
+		rematch_selection_started_count += int(is_rematch)
+	)
+	guest.dice_selection_started.connect(func(is_rematch: bool) -> void:
+		dice_selection_started_count += 1
+		rematch_selection_started_count += int(is_rematch)
+	)
 	host.snapshot_received.connect(func(snapshot: GameSnapshot) -> void:
 		host_snapshot = snapshot
 		snapshot_version += 1
@@ -78,6 +88,12 @@ func _run() -> void:
 		_finish()
 		return
 	guest.join_room(room_code)
+	if not await _wait_until(func() -> bool: return dice_selection_started_count == 2):
+		_fail("公网双端未进入骰子选择阶段")
+		_finish()
+		return
+	host.confirm_dice_loadout(DiceCatalog.default_loadout())
+	guest.confirm_dice_loadout(DiceCatalog.default_loadout())
 	if not await _wait_until(func() -> bool: return ready_count == 2 and host_snapshot != null and guest_snapshot != null):
 		_fail("初始房间未开始")
 		_finish()
@@ -92,6 +108,12 @@ func _run() -> void:
 		_finish()
 		return
 	host.confirm_rematch(2500)
+	if not await _wait_until(func() -> bool: return rematch_selection_started_count == 2):
+		_fail("公网重赛未进入双方选骰阶段")
+		_finish()
+		return
+	host.confirm_dice_loadout(DiceCatalog.default_loadout())
+	guest.confirm_dice_loadout(DiceCatalog.default_loadout())
 	if not await _wait_until(func() -> bool: return rematch_started_count == 2):
 		_fail("公网重赛未在双端开始")
 		_finish()

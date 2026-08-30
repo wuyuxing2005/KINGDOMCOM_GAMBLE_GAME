@@ -39,6 +39,15 @@ func _test_catalog() -> void:
 	_expect_eq(normalized.count(DiceCatalog.DEFAULT_ID), 4, "missing slots use defaults")
 	_expect_eq(DiceCatalog.normalize_loadout(["royal", "royal", "royal", "royal", "royal", "royal", "royal"]).size(), 6, "loadout capped at six")
 	_expect_eq(DiceCatalog.normalize_loadout(["unknown"]), DiceCatalog.default_loadout(), "unknown type ignored")
+	var random_rng := RandomNumberGenerator.new()
+	random_rng.seed = 314159
+	var random_loadout := DiceCatalog.random_loadout(random_rng)
+	_expect_eq(random_loadout.size(), DiceCatalog.MAX_DICE, "random loadout contains six dice")
+	for type_id in random_loadout:
+		_expect_true(DiceCatalog.is_valid_type(type_id), "random loadout only uses known dice")
+	var repeated_rng := RandomNumberGenerator.new()
+	repeated_rng.seed = 314159
+	_expect_eq(DiceCatalog.random_loadout(repeated_rng), random_loadout, "random loadout is reproducible with a fixed seed")
 
 
 func _test_weighted_rolls() -> void:
