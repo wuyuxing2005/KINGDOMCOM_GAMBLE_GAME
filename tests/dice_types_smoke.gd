@@ -37,19 +37,24 @@ func _test_catalog() -> void:
 	_expect_eq(normalized.size(), 6, "loadout fills to six")
 	_expect_eq(normalized.slice(0, 2), ["wild", "gambler"], "chosen dice retained")
 	_expect_eq(normalized.count(DiceCatalog.DEFAULT_ID), 4, "missing slots use defaults")
-	_expect_eq(DiceCatalog.normalize_loadout(["debt", "debt", "debt", "debt", "debt", "debt", "debt"]).size(), 6, "loadout capped at six")
+	var capped := DiceCatalog.normalize_loadout(["debt", "debt", "debt", "debt", "debt", "debt", "debt"])
+	_expect_eq(capped.size(), 6, "loadout fills to six")
+	_expect_eq(capped.count("debt"), 2, "same special type capped at two")
+	_expect_eq(capped.count(DiceCatalog.DEFAULT_ID), 4, "rejected duplicate slots use ordinary dice")
 	_expect_eq(DiceCatalog.normalize_loadout(["unknown"]), DiceCatalog.default_loadout(), "unknown type ignored")
 	_expect_eq(DiceCatalog.get_definition("wild")["faces"], [2, 3, 4, 5, 6, DiceCatalog.WILD_FACE], "wild die faces")
-	_expect_eq(DiceCatalog.get_definition("gambler")["faces"], [1, 1, 5, 5, DiceCatalog.BLANK_FACE, DiceCatalog.BLANK_FACE], "gambler die faces")
+	_expect_eq(DiceCatalog.get_definition("gambler")["faces"], [1, 5, 5, DiceCatalog.BLANK_FACE, DiceCatalog.BLANK_FACE, DiceCatalog.BLANK_FACE], "gambler die faces")
 	_expect_eq(DiceCatalog.get_definition("sequence")["faces"], [2, 3, 3, 4, 4, 5], "sequence die faces")
 	_expect_eq(DiceCatalog.get_definition("greed")["faces"], [1, 3, 4, 5, 6, DiceCatalog.GREED_FACE], "greed die faces")
-	_expect_eq(DiceCatalog.get_definition("debt")["faces"], [1, 1, 5, 5, 6, DiceCatalog.DEBT_FACE], "debt die faces")
+	_expect_eq(DiceCatalog.get_definition("debt")["faces"], [1, 5, 5, 6, 6, DiceCatalog.DEBT_FACE], "debt die faces")
 	var random_rng := RandomNumberGenerator.new()
 	random_rng.seed = 314159
 	var random_loadout := DiceCatalog.random_loadout(random_rng)
 	_expect_eq(random_loadout.size(), DiceCatalog.MAX_DICE, "random loadout contains six dice")
 	for type_id in random_loadout:
 		_expect_true(DiceCatalog.get_ids().has(type_id), "random loadout only uses selectable special dice")
+	for type_id in DiceCatalog.get_ids():
+		_expect_true(random_loadout.count(type_id) <= DiceCatalog.MAX_SPECIAL_DICE_PER_TYPE, "random loadout respects per-type cap")
 	var repeated_rng := RandomNumberGenerator.new()
 	repeated_rng.seed = 314159
 	_expect_eq(DiceCatalog.random_loadout(repeated_rng), random_loadout, "random loadout is reproducible with a fixed seed")
@@ -71,7 +76,7 @@ func _test_face_distributions() -> void:
 		wild_faces += int(DiceCatalog.roll_value("wild", rng) == DiceCatalog.WILD_FACE)
 		greed_faces += int(DiceCatalog.roll_value("greed", rng) == DiceCatalog.GREED_FACE)
 		debt_faces += int(DiceCatalog.roll_value("debt", rng) == DiceCatalog.DEBT_FACE)
-	_expect_true(gambler_scoring_faces > 3800, "gambler die scores on about four faces")
+	_expect_true(gambler_scoring_faces > 2800 and gambler_scoring_faces < 3200, "gambler die scores on about three faces")
 	_expect_true(sequence_middle_faces > 3800, "sequence die has four middle faces")
 	_expect_true(wild_faces > 850 and wild_faces < 1150, "wild face appears on one of six sides")
 	_expect_true(greed_faces > 850 and greed_faces < 1150, "greed face appears on one of six sides")
@@ -80,7 +85,7 @@ func _test_face_distributions() -> void:
 
 func _test_session_type_flow() -> void:
 	var player_loadout := ["wild", "gambler", "sequence", "greed", "debt", "wild"]
-	var opponent_loadout := ["debt", "debt", "debt", "debt", "debt", "debt"]
+	var opponent_loadout := ["debt", "debt", "gambler", "gambler", "sequence", "sequence"]
 	var game := Session.new(4000, 1234, [player_loadout, opponent_loadout])
 	_expect_true(game.apply_action(Action.roll()), "typed first roll accepted")
 	_expect_eq(game.current_roll_types, player_loadout, "first roll uses current player's loadout")

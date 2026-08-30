@@ -3,6 +3,7 @@ extends RefCounted
 
 const DEFAULT_ID := "default"
 const MAX_DICE := 6
+const MAX_SPECIAL_DICE_PER_TYPE := 2
 
 const WILD_FACE := 7
 const BLANK_FACE := 8
@@ -34,9 +35,9 @@ const DEFINITIONS := [
 	{
 		"id": "gambler",
 		"name": "赌徒骰",
-		"faces": [1, 1, 5, 5, BLANK_FACE, BLANK_FACE],
-		"odds": "六面：1 / 1 / 5 / 5 / X / X",
-		"description": "1和5较多；X为无效面，适合稳定取得小分。",
+		"faces": [1, 5, 5, BLANK_FACE, BLANK_FACE, BLANK_FACE],
+		"odds": "六面：1 / 5 / 5 / X / X / X",
+		"description": "一半骰面可直接得分；X为完全无效面。",
 		"body_color": Color("b5453d"),
 		"pip_color": Color("fff0d2"),
 		"rim_color": Color("ef8b70"),
@@ -56,7 +57,7 @@ const DEFINITIONS := [
 		"name": "贪婪骰",
 		"faces": [1, 3, 4, 5, 6, GREED_FACE],
 		"odds": "六面：1 / 3 / 4 / 5 / 6 / 💰",
-		"description": "💰使本次得分提高50%，并强制继续投掷一次。",
+		"description": "💰使本次得分翻倍，并强制继续投掷一次。",
 		"body_color": Color("b88a25"),
 		"pip_color": Color("3e2910"),
 		"rim_color": Color("f3cf61"),
@@ -64,9 +65,9 @@ const DEFINITIONS := [
 	{
 		"id": "debt",
 		"name": "债务骰",
-		"faces": [1, 1, 5, 5, 6, DEBT_FACE],
-		"odds": "六面：1 / 1 / 5 / 5 / 6 / 💀",
-		"description": "1和5较多；每个💀使总分减少300。",
+		"faces": [1, 5, 5, 6, 6, DEBT_FACE],
+		"odds": "六面：1 / 5 / 5 / 6 / 6 / 💀",
+		"description": "有效骰面质量较高；每个💀使本轮分数减少200。",
 		"body_color": Color("34383c"),
 		"pip_color": Color("e8dfd0"),
 		"rim_color": Color("747b80"),
@@ -96,12 +97,19 @@ static func is_valid_type(type_id: String) -> bool:
 
 static func normalize_loadout(values: Array) -> Array[String]:
 	var result: Array[String] = []
+	var special_counts: Dictionary = {}
 	for value in values:
 		if result.size() >= MAX_DICE:
 			break
 		var type_id := String(value)
-		if is_valid_type(type_id):
-			result.append(type_id)
+		if not is_valid_type(type_id):
+			continue
+		if type_id != DEFAULT_ID:
+			var count := int(special_counts.get(type_id, 0))
+			if count >= MAX_SPECIAL_DICE_PER_TYPE:
+				continue
+			special_counts[type_id] = count + 1
+		result.append(type_id)
 	while result.size() < MAX_DICE:
 		result.append(DEFAULT_ID)
 	return result
@@ -112,10 +120,15 @@ static func default_loadout() -> Array[String]:
 
 
 static func random_loadout(rng: RandomNumberGenerator) -> Array[String]:
-	var ids := get_ids()
+	var pool: Array[String] = []
+	for type_id in get_ids():
+		for count in range(MAX_SPECIAL_DICE_PER_TYPE):
+			pool.append(type_id)
 	var result: Array[String] = []
 	for index in range(MAX_DICE):
-		result.append(ids[rng.randi_range(0, ids.size() - 1)])
+		var pool_index := rng.randi_range(0, pool.size() - 1)
+		result.append(pool[pool_index])
+		pool.remove_at(pool_index)
 	return result
 
 

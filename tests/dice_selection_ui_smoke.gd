@@ -53,10 +53,15 @@ func _run() -> void:
 		_fail("配置摘要未同步")
 	for index in range(10):
 		scene._change_dice_count("sequence", 1)
+	if int(scene.dice_selection_counts["sequence"]) != DiceCatalog.MAX_SPECIAL_DICE_PER_TYPE:
+		_fail("同一种特殊骰没有限制为两枚")
+	for index in range(10):
+		scene._change_dice_count("gambler", 1)
 	if scene._selected_dice_count() != 6:
 		_fail("骰子选择没有限制为六枚")
 	# Restore the intended three selected dice for the game-start assertion.
 	scene.dice_selection_counts["sequence"] = 0
+	scene.dice_selection_counts["gambler"] = 0
 	scene._update_dice_selector_summary()
 	if DisplayServer.get_name() != "headless":
 		await process_frame

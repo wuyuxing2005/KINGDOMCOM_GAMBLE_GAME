@@ -46,7 +46,7 @@ func get_selected_score() -> int:
 			values.append(current_roll[index])
 	var base_score := ScoringRules.score_selection(values)
 	if base_score > 0 and current_roll.has(DiceCatalog.GREED_FACE):
-		return base_score * 3 / 2
+		return base_score * 2
 	return base_score
 
 func _default_types(count: int) -> Array[String]:

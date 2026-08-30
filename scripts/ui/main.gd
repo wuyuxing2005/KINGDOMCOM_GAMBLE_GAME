@@ -536,9 +536,9 @@ func _confirm_dice_selection() -> void:
 func _change_dice_count(type_id: String, delta: int) -> void:
 	var total := _selected_dice_count()
 	var current := int(dice_selection_counts.get(type_id, 0))
-	if delta > 0 and total >= DiceCatalog.MAX_DICE:
+	if delta > 0 and (total >= DiceCatalog.MAX_DICE or current >= DiceCatalog.MAX_SPECIAL_DICE_PER_TYPE):
 		return
-	dice_selection_counts[type_id] = clampi(current + delta, 0, DiceCatalog.MAX_DICE)
+	dice_selection_counts[type_id] = clampi(current + delta, 0, DiceCatalog.MAX_SPECIAL_DICE_PER_TYPE)
 	_update_dice_selector_summary()
 
 func _selected_dice_count() -> int:
@@ -571,7 +571,7 @@ func _update_dice_selector_summary() -> void:
 		var special_description := _dice_loadout_description()
 		if special_description.is_empty():
 			special_description = "尚未选择特殊骰"
-		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为普通骰　｜　%s" % [selected, 6 - selected, special_description]
+		dice_selection_summary.text = "已选择 %d/6；剩余 %d 枚自动补为普通骰　｜　同类最多2枚　｜　%s" % [selected, 6 - selected, special_description]
 	for type_id in dice_count_labels:
 		(dice_count_labels[type_id] as Label).text = str(dice_selection_counts[type_id])
 func _setup_update_manager() -> void:

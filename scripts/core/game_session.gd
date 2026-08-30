@@ -75,7 +75,7 @@ func get_selected_values() -> Array[int]:
 func get_selected_score() -> int:
 	var base_score := ScoringRules.score_selection(get_selected_values())
 	if base_score > 0 and current_roll.has(DiceCatalog.GREED_FACE):
-		return base_score * 3 / 2
+		return base_score * 2
 	return base_score
 
 func get_snapshot() -> GameSnapshot:
@@ -114,7 +114,7 @@ func _apply_roll() -> bool:
 		current_roll.append(DiceCatalog.roll_value(type_id, rng))
 	var debt_faces := current_roll.count(DiceCatalog.DEBT_FACE)
 	if debt_faces > 0:
-		scores[current_player] = maxi(0, scores[current_player] - debt_faces * 300)
+		turn_score = maxi(0, turn_score - debt_faces * 200)
 	must_roll_again = current_roll.has(DiceCatalog.GREED_FACE)
 	phase = Phase.AWAITING_SELECTION
 	rolled.emit(current_roll.duplicate(), current_roll_types.duplicate())
